@@ -11,4 +11,8 @@ public final class AppConstants {
     public static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS =
             UPDATE_INTERVAL_IN_MILLISECONDS / 2;
 
+    /**
+     * For stepcount sensors
+      */
+    public final static long MICROSECONDS_IN_ONE_MINUTE = 60000000;
 }

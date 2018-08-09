@@ -1,13 +1,17 @@
 package it.polimi.steptrack;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.location.Location;
 import android.preference.PreferenceManager;
 
 import java.text.DateFormat;
+import java.util.Calendar;
 import java.util.Date;
 
 public class AppUtils {
+    // Identify Shared Preference Store
+    public final static String PREFS_NAME = "steptrack_prefs";
 
     public static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
 
@@ -74,4 +78,74 @@ public class AppUtils {
         return distance;
     }
 
+    /*** For step counts ********/
+
+    // Should the Step Counting Service be running?
+    public static boolean shouldServiceRun(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
+        return prefs.getBoolean("serviceRunning", false);
+    }
+
+    // Should the Step Counting Service be running?
+    public static void setServiceRun(Context context, boolean running) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
+        SharedPreferences.Editor prefsEditor = prefs.edit();
+        prefsEditor.putBoolean("serviceRunning", running);
+        prefsEditor.apply();
+    }
+
+    // How many steps have I walked?
+    public static String getStepCount(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
+        return String.format("%,d", (prefs.getInt("stepCount", 0) - prefs.getInt("stepCountSubtract", 0)));
+    }
+
+    // Set how many steps I have walked.
+    public static void setStepCount(Context context, Integer steps) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
+        SharedPreferences.Editor prefsEditor = prefs.edit();
+        prefsEditor.putInt("stepCount", steps);
+        prefsEditor.apply();
+    }
+
+//    // Set Subtract Step Count (Reset)
+//    public static void resetStepCount(Context context) {
+//        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
+//        SharedPreferences.Editor prefsEditor = prefs.edit();
+//        prefsEditor.putInt("stepCountSubtract", prefs.getInt("stepCount", 0));
+//        prefsEditor.apply();
+//    }
+//
+//    // Reset the Subtract Step Count (On Boot)
+//    public static void clearStepCount(Context context) {
+//        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
+//        SharedPreferences.Editor prefsEditor = prefs.edit();
+//        prefsEditor.putInt("stepCountSubtract", 0);
+//        prefsEditor.putInt("stepCount", 0);
+//        prefsEditor.apply();
+//    }
+
+    /** TODO organized in a better way
+     * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone
+     */
+    public static long getTomorrow() {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(System.currentTimeMillis());
+        c.set(Calendar.HOUR_OF_DAY, 0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 1);
+        c.set(Calendar.MILLISECOND, 0);
+        c.add(Calendar.DATE, 1); //oneDay after
+        return c.getTimeInMillis();
+    }
+
+    public static long getToday(){
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(System.currentTimeMillis());
+        c.set(Calendar.HOUR_OF_DAY,0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 1);
+        c.set(Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
+    }
 }

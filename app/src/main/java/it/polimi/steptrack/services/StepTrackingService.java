@@ -8,7 +8,12 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.os.Binder;
 import android.os.Build;
@@ -20,6 +25,7 @@ import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
@@ -34,7 +40,9 @@ import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.ui.MainActivity;
 
-public class StepTrackingService extends Service {
+import static it.polimi.steptrack.AppUtils.PREFS_NAME;
+
+public class StepTrackingService extends Service implements SensorEventListener{
 
     private static final String PACKAGE_NAME = "it.polimi.steptrack";
 
@@ -58,16 +66,14 @@ public class StepTrackingService extends Service {
      * The identifier for the notification displayed for the foreground service.
      */
     private static final int NOTIFICATION_ID = 12345678;
-
     /**
      * Used to check whether the bound activity has really gone away and not unbound as part of an
      * orientation change. We create a foreground service notification only if the former takes
      * place.
      */
     private boolean mChangingConfiguration = false;
-
     private NotificationManager mNotificationManager;
-
+    private NotificationCompat.Builder mBuilder;
     /**
      * Contains parameters used by {@link com.google.android.gms.location.FusedLocationProviderClient}.
      */
@@ -95,6 +101,7 @@ public class StepTrackingService extends Service {
 
     @Override
     public void onCreate() {
+        Log.w(TAG, "On Creating");
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
         mLocationCallback = new LocationCallback() {
@@ -106,11 +113,29 @@ public class StepTrackingService extends Service {
         };
 
         createLocationRequest();
-        getLastLocation();
+        getLastLocation(); //This is just a fuse location without high accuracy
 
         HandlerThread handlerThread = new HandlerThread(TAG);
         handlerThread.start();
         mServiceHandler = new Handler(handlerThread.getLooper());
+
+        //************************* For step count ~*********************//
+        // Setup Step Counter
+        SensorManager sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        Sensor countSensor = null;
+        if (sensorManager != null) {
+            countSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        }
+        if (countSensor != null) {
+            Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
+            sensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+        } else {
+            Toast.makeText(this, "Device not Compatible!", Toast.LENGTH_LONG).show();
+            this.stopSelf();
+        }
+
+        // Get Notification Manager
+        mBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
         // Android O requires a Notification Channel.
@@ -125,19 +150,45 @@ public class StepTrackingService extends Service {
         }
     }
 
+    //This is called only when there is Start service
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i(TAG, "Service started");
-        boolean startedFromNotification = intent.getBooleanExtra(EXTRA_STARTED_FROM_NOTIFICATION,
-                false);
+//        TODO-NOTE: removed because not need action in the notification
+//        boolean startedFromNotification = intent.getBooleanExtra(EXTRA_STARTED_FROM_NOTIFICATION,
+//                false);
+//
+//        // We got here because the user decided to remove location updates from the notification.
+//        if (startedFromNotification) {
+//            removeLocationUpdates();
+//            stopSelf();
+//        }
+//        // Tells the system to not try to recreate the service after it has been killed.
+//        return START_NOT_STICKY;
+//
 
-        // We got here because the user decided to remove location updates from the notification.
-        if (startedFromNotification) {
-            removeLocationUpdates();
-            stopSelf();
-        }
-        // Tells the system to not try to recreate the service after it has been killed.
-        return START_NOT_STICKY;
+        //************************* For step count ~*********************//
+/*
+        // Setup First Notification TODO-Q?? the first is set when calling start forgound?
+        mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+        //updateNotification(true);
+
+        // Setup Shared Preference Change Listener
+        SharedPreferences sharedPreferences;
+        sharedPreferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        SharedPreferences.OnSharedPreferenceChangeListener sharedPreferenceChangeListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
+            @Override
+            public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
+                // Update Notification Bar
+                //updateNotification(false);
+                mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+            }
+        };
+        sharedPreferences.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener);
+*/
+
+        // Restart the service if its killed
+        return START_STICKY;
     }
 
     @Override
@@ -168,6 +219,7 @@ public class StepTrackingService extends Service {
         super.onRebind(intent);
     }
 
+    //Here is the place where the service shows in the notification
     @Override
     public boolean onUnbind(Intent intent) {
         Log.i(TAG, "Last client unbound from service");
@@ -178,7 +230,7 @@ public class StepTrackingService extends Service {
         if (!mChangingConfiguration && AppUtils.requestingLocationUpdates(this)) {
             Log.i(TAG, "Starting foreground service");
             /*
-            // TODO(developer). If targeting O, use the following code.
+            // TODO(developer). If targeting O, use the following code.(method deleted)
             if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
                 mNotificationManager.startServiceInForeground(new Intent(this,
                         LocationUpdatesService.class), NOTIFICATION_ID, getNotification());
@@ -186,7 +238,7 @@ public class StepTrackingService extends Service {
                 startForeground(NOTIFICATION_ID, getNotification());
             }
              */
-            startForeground(NOTIFICATION_ID, getNotification());
+            startForeground(NOTIFICATION_ID, getNotification(true)); //Anyway works for Oreo
         }
         return true; // Ensures onRebind() is called when a client re-binds.
     }
@@ -203,6 +255,7 @@ public class StepTrackingService extends Service {
     public void requestLocationUpdates() {
         Log.i(TAG, "Requesting location updates");
         AppUtils.setRequestingLocationUpdates(this, true);
+        //TODO-NOTE: here makes the call for onStartCommand.
         startService(new Intent(getApplicationContext(), StepTrackingService.class));
         try {
             mFusedLocationClient.requestLocationUpdates(mLocationRequest,
@@ -232,45 +285,39 @@ public class StepTrackingService extends Service {
     /**
      * Returns the {@link NotificationCompat} used as part of the foreground service.
      */
-    private Notification getNotification() {
-        Intent intent = new Intent(this, StepTrackingService.class);
+    private Notification getNotification(boolean isFirstTime) {
+        if (isFirstTime){
+            // PendingIntent to launch activity.
+            PendingIntent activityPendingIntent = PendingIntent.getActivity(this,0,
+                    new Intent(this, MainActivity.class), 0);
+            mBuilder.setContentIntent(activityPendingIntent)
+                    .setContentText("Step Counter - Counting")
+                    .setContentTitle(AppUtils.getLocationTitle(this))
+                    .setOngoing(true)
+                    .setPriority(Notification.PRIORITY_HIGH)
+                    .setSmallIcon(R.mipmap.ic_tracking)
+                    //.setTicker(text)
+                    .setWhen(System.currentTimeMillis())
+                    .setAutoCancel(false)
+                    .setOnlyAlertOnce(true);
 
-        CharSequence text = AppUtils.getLocationText(mLocation);
-
-        // Extra to help us figure out if we arrived in onStartCommand via the notification or not.
-        intent.putExtra(EXTRA_STARTED_FROM_NOTIFICATION, true);
-
-        // The PendingIntent that leads to a call to onStartCommand() in this service.
-        PendingIntent servicePendingIntent = PendingIntent.getService(this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
-
-        // The PendingIntent to launch activity.
-        PendingIntent activityPendingIntent = PendingIntent.getActivity(this, 0,
-                new Intent(this, MainActivity.class), 0);
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-//                .addAction(R.drawable.ic_launch, getString(R.string.launch_activity),
-////                        activityPendingIntent)
-////                .addAction(R.drawable.ic_cancel, getString(R.string.remove_location_updates),
-////                        servicePendingIntent)
-                .setContentIntent(activityPendingIntent)
-                .setContentText(text)
-                .setContentTitle(AppUtils.getLocationTitle(this))
-                .setOngoing(true)
-                .setPriority(Notification.PRIORITY_HIGH)
-                .setSmallIcon(R.mipmap.ic_tracking)
-                .setTicker(text)
-                .setWhen(System.currentTimeMillis());
-
-        // Set the Channel ID for Android O.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setChannelId(CHANNEL_ID); // Channel ID
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                mBuilder.setVisibility(Notification.VISIBILITY_SECRET);
+            }
+            // Set the Channel ID for Android O.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                mBuilder.setChannelId(CHANNEL_ID); // Channel ID
+            }
         }
+        // Update Step Count
+        mBuilder.setContentTitle(AppUtils.getStepCount(this) + " steps taken");
 
-        return builder.build();
+        return mBuilder.build();
     }
 
+
     private void getLastLocation() {
+        Log.w(TAG,"getting last location from onCreate");
         try {
             mFusedLocationClient.getLastLocation()
                     .addOnCompleteListener(new OnCompleteListener<Location>() {
@@ -278,6 +325,7 @@ public class StepTrackingService extends Service {
                         public void onComplete(@NonNull Task<Location> task) {
                             if (task.isSuccessful() && task.getResult() != null) {
                                 mLocation = task.getResult();
+                                //Log.w(TAG, "The inital location: " + mLocation);
                             } else {
                                 Log.w(TAG, "Failed to get location.");
                             }
@@ -293,14 +341,14 @@ public class StepTrackingService extends Service {
 
         mLocation = location;
 
-        // Notify anyone listening for broadcasts about the new location.
-        Intent intent = new Intent(ACTION_BROADCAST);
-        intent.putExtra(EXTRA_LOCATION, location);
-        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+//        // Notify anyone listening for broadcasts about the new location.
+//        Intent intent = new Intent(ACTION_BROADCAST);
+//        intent.putExtra(EXTRA_LOCATION, location);
+//        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
 
-        // Update notification content if running as a foreground service.
+        //TODO-NOTE: not location Update notification content if running as a foreground service.
         if (serviceIsRunningInForeground(this)) {
-            mNotificationManager.notify(NOTIFICATION_ID, getNotification());
+            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
         }
     }
 
@@ -312,6 +360,17 @@ public class StepTrackingService extends Service {
         mLocationRequest.setInterval(AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS);
         mLocationRequest.setFastestInterval(AppConstants.FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent sensorEvent) {
+        // Record Step Count
+        AppUtils.setStepCount(this, (int) sensorEvent.values[0]);
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int i) {
+
     }
 
     /**

@@ -91,11 +91,9 @@ public class MainActivity extends AppCompatActivity
         if(!checkPermissions()){
             requestPermissions();
         }
-//        if (AppUtils.requestingLocationUpdates(this)) {
-//            if (!checkPermissions()) {
-//                requestPermissions();
-//            }
-//        }
+
+        // Start service for counting steps
+
     }
 
     @Override
@@ -188,7 +186,7 @@ public class MainActivity extends AppCompatActivity
         // Bind to the service. If the service is in foreground mode, this signals to the service
         // that since this activity is in the foreground, the service can exit foreground mode.
         bindService(new Intent(this, StepTrackingService.class), mServiceConnection,
-                Context.BIND_AUTO_CREATE);
+                Context.BIND_AUTO_CREATE);//TODO NOTE: activates the onCreate of service
     }
 
 

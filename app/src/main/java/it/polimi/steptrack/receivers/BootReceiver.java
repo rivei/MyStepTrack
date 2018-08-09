@@ -33,5 +33,19 @@ public class BootReceiver extends BroadcastReceiver {
 
         context.startService(new Intent(context, SensorListener.class));
     */
+
+        //After reboot, check if the service is still running and retrieve the steps record from last time
+
+//        // Clear Steps
+//        Preferences.clearStepCount(context);
+//
+//        // Check if the Step Counter service was running?
+//        if (Preferences.shouldServiceRun(context))
+//        {
+//            // Start Step Counter service
+//            Intent myIntent = new Intent(context, StepCounter.class);
+//            context.startService(myIntent);
+//        }
+
     }
 }
