@@ -1,11 +1,15 @@
 package it.polimi.steptrack.ui;
 
 import android.Manifest;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -26,6 +30,7 @@ import android.view.MenuItem;
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.R;
+import it.polimi.steptrack.services.StepTrackingService;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener,
@@ -40,9 +45,31 @@ public class MainActivity extends AppCompatActivity
             Manifest.permission.RECEIVE_BOOT_COMPLETED
     };
 
-
     FloatingActionButton fab1;
     FloatingActionButton fab2;
+
+
+    // A reference to the service used to get location updates.
+    private StepTrackingService mService = null;
+    // Tracks the bound state of the service.
+    private boolean mBound = false;
+    // Monitors the state of the connection to the service.
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            StepTrackingService.LocalBinder binder = (StepTrackingService.LocalBinder) service;
+            mService = binder.getService();
+            mBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            mService = null;
+            mBound = false;
+        }
+    };
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -138,23 +165,57 @@ public class MainActivity extends AppCompatActivity
         fab1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+//                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+//                        .setAction("Action", null).show();
+                if (!checkPermissions()) {
+                    requestPermissions();
+                } else {
+                    mService.requestLocationUpdates();
+                }
             }
         });
         fab2 = (FloatingActionButton) findViewById(R.id.fab2);
         fab2.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                mService.removeLocationUpdates();
             }
         });
 
         // Restore the state of the buttons when the activity (re)launches.
         setButtonsState(AppUtils.requestingLocationUpdates(this));
+
+        // Bind to the service. If the service is in foreground mode, this signals to the service
+        // that since this activity is in the foreground, the service can exit foreground mode.
+        bindService(new Intent(this, StepTrackingService.class), mServiceConnection,
+                Context.BIND_AUTO_CREATE);
+    }
+
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+//        LocalBroadcastManager.getInstance(this).registerReceiver(myReceiver,
+//                new IntentFilter(LocationUpdatesService.ACTION_BROADCAST));
+    }
+
+    @Override
+    protected void onPause() {
+//        LocalBroadcastManager.getInstance(this).unregisterReceiver(myReceiver);
+        super.onPause();
     }
 
     @Override
     protected void onStop() {
+        if (mBound) {
+            // Unbind from the service. This signals to the service that this activity is no longer
+            // in the foreground, and the service can respond by promoting itself to a foreground
+            // service.
+            unbindService(mServiceConnection);
+            mBound = false;
+        }
+        PreferenceManager.getDefaultSharedPreferences(this)
+                .unregisterOnSharedPreferenceChangeListener(this);
         super.onStop();
     }
 
@@ -235,11 +296,11 @@ public class MainActivity extends AppCompatActivity
                 // receive empty arrays.
                 Log.i(TAG, "User interaction was cancelled.");
             } else if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission was granted.
+                // Permission was granted. TODO make this only for location update
                 //mService.requestLocationUpdates();
             } else {
                 // Permission denied.
-                //setButtonsState(false);
+                setButtonsState(false);
                 Snackbar.make(
                         findViewById(R.id.drawer_layout),
                         R.string.permission_denied_explanation,

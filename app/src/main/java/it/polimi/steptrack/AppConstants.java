@@ -1,6 +1,6 @@
 package it.polimi.steptrack;
 
-final class AppConstants {
+public final class AppConstants {
 
     /**
      * For Locations

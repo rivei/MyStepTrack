@@ -46,7 +46,7 @@
             android:value="@string/google_maps_key" />
 
 
-        <!--<service android:name=".services.StepTrackingService" />-->
+        <service android:name=".services.StepTrackingService" />
 
 
         <receiver android:name=".receivers.BootReceiver">
