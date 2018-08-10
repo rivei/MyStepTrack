@@ -1,5 +1,6 @@
 package it.polimi.steptrack;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.location.Location;
@@ -9,11 +10,41 @@ import java.text.DateFormat;
 import java.util.Calendar;
 import java.util.Date;
 
+import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
+import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
+import static it.polimi.steptrack.AppConstants.STEPTRACKINGSERVICE;
+
 public class AppUtils {
     // Identify Shared Preference Store
     public final static String PREFS_NAME = "steptrack_prefs";
 
     public static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
+
+    /**
+     * Returns if the service is running,running in foregound or not running
+     * @param context The {@link Context}.
+     * @return
+     */
+    public static int getServiceRunningStatus(Context context){
+        int status = 0;
+        ActivityManager manager = (ActivityManager) context.getSystemService(
+                Context.ACTIVITY_SERVICE);
+        if(manager != null){
+            for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(
+                    Integer.MAX_VALUE)){
+                if(STEPTRACKINGSERVICE.equals(service.service.getClassName())){
+                    status = SERVICE_RUNNING;
+                    if (service.foreground) status = SERVICE_RUNNING_FOREGROUND;
+
+                    break;
+                }
+            }
+        }
+
+        return status;
+    }
+
+
 
     /**
      * Returns true if requesting location updates, otherwise returns false.

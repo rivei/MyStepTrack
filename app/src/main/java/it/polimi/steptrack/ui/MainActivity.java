@@ -36,6 +36,7 @@ public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener,
         SharedPreferences.OnSharedPreferenceChangeListener{
     private static final String TAG = MainActivity.class.getSimpleName();
+    final MainActivity self = this;
 
     // Used in checking for runtime permissions.
     private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34; //TODO can be 12345??
@@ -92,8 +93,17 @@ public class MainActivity extends AppCompatActivity
             requestPermissions();
         }
 
-        // Start service for counting steps
+        //TODO: *** Start service for counting steps
+        // Check if the service is running
+        if (AppUtils.getServiceRunningStatus(self) <= 0) {
 
+            //TODO: Mark Service as Started
+            AppUtils.setServiceRun(this, false);
+
+            // Start Step Counting service
+            Intent serviceIntent = new Intent(this, StepTrackingService.class);
+            startService(serviceIntent); //Activate onStartCommand
+        }
     }
 
     @Override
@@ -186,7 +196,8 @@ public class MainActivity extends AppCompatActivity
         // Bind to the service. If the service is in foreground mode, this signals to the service
         // that since this activity is in the foreground, the service can exit foreground mode.
         bindService(new Intent(this, StepTrackingService.class), mServiceConnection,
-                Context.BIND_AUTO_CREATE);//TODO NOTE: activates the onCreate of service
+                Context.BIND_AUTO_CREATE);//TODO NOTE: activates the onCreate of service and
+        //TODO NOTE: the foreground mode only works when this is put in onStart
     }
 
 
@@ -331,4 +342,6 @@ public class MainActivity extends AppCompatActivity
             fab2.hide();//.setEnabled(false);
         }
     }
+
+
 }

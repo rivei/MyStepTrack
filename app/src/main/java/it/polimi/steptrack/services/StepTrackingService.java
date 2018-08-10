@@ -40,13 +40,17 @@ import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.ui.MainActivity;
 
+import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
+import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppUtils.PREFS_NAME;
 
-public class StepTrackingService extends Service implements SensorEventListener{
-
+public class StepTrackingService extends Service implements
+        SensorEventListener{
     private static final String PACKAGE_NAME = "it.polimi.steptrack";
 
     private static final String TAG = StepTrackingService.class.getSimpleName();
+
+    private boolean mSessionStarted = false; //Activate location update only when session starts
 
     /**
      * The name of the channel for notifications.
@@ -118,6 +122,7 @@ public class StepTrackingService extends Service implements SensorEventListener{
         HandlerThread handlerThread = new HandlerThread(TAG);
         handlerThread.start();
         mServiceHandler = new Handler(handlerThread.getLooper());
+        //***HandlerThread needs to call myHandlerThread.quit() to free the resources and stop the execution of the thread.
 
         //************************* For step count ~*********************//
         // Setup Step Counter
@@ -219,7 +224,8 @@ public class StepTrackingService extends Service implements SensorEventListener{
         super.onRebind(intent);
     }
 
-    //Here is the place where the service shows in the notification
+    //Here is the place where the service shows in the notification;
+    // It is activated when the App UI goes to the background
     @Override
     public boolean onUnbind(Intent intent) {
         Log.i(TAG, "Last client unbound from service");
@@ -227,17 +233,8 @@ public class StepTrackingService extends Service implements SensorEventListener{
         // Called when the last client (MainActivity in case of this sample) unbinds from this
         // service. If this method is called due to a configuration change in MainActivity, we
         // do nothing. Otherwise, we make this service a foreground service.
-        if (!mChangingConfiguration && AppUtils.requestingLocationUpdates(this)) {
+        if (!mChangingConfiguration){//TODO: && AppUtils.requestingLocationUpdates(this)) {
             Log.i(TAG, "Starting foreground service");
-            /*
-            // TODO(developer). If targeting O, use the following code.(method deleted)
-            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
-                mNotificationManager.startServiceInForeground(new Intent(this,
-                        LocationUpdatesService.class), NOTIFICATION_ID, getNotification());
-            } else {
-                startForeground(NOTIFICATION_ID, getNotification());
-            }
-             */
             startForeground(NOTIFICATION_ID, getNotification(true)); //Anyway works for Oreo
         }
         return true; // Ensures onRebind() is called when a client re-binds.
@@ -253,15 +250,17 @@ public class StepTrackingService extends Service implements SensorEventListener{
      * {@link SecurityException}.
      */
     public void requestLocationUpdates() {
+        mSessionStarted = true;
         Log.i(TAG, "Requesting location updates");
-        AppUtils.setRequestingLocationUpdates(this, true);
+        AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
         //TODO-NOTE: here makes the call for onStartCommand.
-        startService(new Intent(getApplicationContext(), StepTrackingService.class));
+        //startService(new Intent(getApplicationContext(), StepTrackingService.class));
         try {
             mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                     mLocationCallback, Looper.myLooper());
         } catch (SecurityException unlikely) {
-            AppUtils.setRequestingLocationUpdates(this, false);
+            mSessionStarted = false;
+            AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
         }
     }
@@ -273,11 +272,13 @@ public class StepTrackingService extends Service implements SensorEventListener{
     public void removeLocationUpdates() {
         Log.i(TAG, "Removing location updates");
         try {
+            mSessionStarted = false;
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-            AppUtils.setRequestingLocationUpdates(this, false);
-            stopSelf();
+            AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            //stopSelf(); //TODO: move this to the whole service
         } catch (SecurityException unlikely) {
-            AppUtils.setRequestingLocationUpdates(this, true);
+            mSessionStarted = true;
+            AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not remove updates. " + unlikely);
         }
     }
@@ -347,8 +348,11 @@ public class StepTrackingService extends Service implements SensorEventListener{
 //        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
 
         //TODO-NOTE: not location Update notification content if running as a foreground service.
-        if (serviceIsRunningInForeground(this)) {
-            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
+//        if (serviceIsRunningInForeground(this)) {
+//            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
+//        }
+        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND){
+            mNotificationManager.notify(NOTIFICATION_ID,getNotification(true));
         }
     }
 
@@ -366,6 +370,10 @@ public class StepTrackingService extends Service implements SensorEventListener{
     public void onSensorChanged(SensorEvent sensorEvent) {
         // Record Step Count
         AppUtils.setStepCount(this, (int) sensorEvent.values[0]);
+        Log.i(TAG, AppUtils.getStepCount(this));
+        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
+            mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+        }
     }
 
     @Override
@@ -381,26 +389,5 @@ public class StepTrackingService extends Service implements SensorEventListener{
         public StepTrackingService getService() {
             return StepTrackingService.this;
         }
-    }
-
-    /**
-     * Returns true if this is a foreground service.
-     *
-     * @param context The {@link Context}.
-     */
-    public boolean serviceIsRunningInForeground(Context context) {
-        ActivityManager manager = (ActivityManager) context.getSystemService(
-                Context.ACTIVITY_SERVICE);
-        if (manager != null) {
-            for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(
-                    Integer.MAX_VALUE)) {
-                if (getClass().getName().equals(service.service.getClassName())) {
-                    if (service.foreground) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
     }
 }

@@ -15,4 +15,12 @@ public final class AppConstants {
      * For stepcount sensors
       */
     public final static long MICROSECONDS_IN_ONE_MINUTE = 60000000;
+
+
+    /**
+     * For StepTrackingService
+     */
+    public final static String STEPTRACKINGSERVICE = "it.polimi.steptrack.services.StepTrackingService";
+    public final static int SERVICE_RUNNING = 1;
+    public final static int SERVICE_RUNNING_FOREGROUND = 2;
 }
