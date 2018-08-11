@@ -44,6 +44,9 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_key" />
+        <meta-data
+            android:name="com.google.android.awareness.API_KEY"
+            android:value="AIzaSyAZKvV26Fare-9Lkjv-zSJlwBWzq0w6pI8"/>
 
 
         <service android:name=".services.StepTrackingService" />

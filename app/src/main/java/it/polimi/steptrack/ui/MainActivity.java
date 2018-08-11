@@ -1,9 +1,12 @@
 package it.polimi.steptrack.ui;
 
 import android.Manifest;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -16,6 +19,7 @@ import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.support.design.widget.NavigationView;
@@ -26,6 +30,22 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
+
+import com.google.android.gms.awareness.Awareness;
+import com.google.android.gms.awareness.fence.AwarenessFence;
+import com.google.android.gms.awareness.fence.DetectedActivityFence;
+import com.google.android.gms.awareness.fence.FenceState;
+import com.google.android.gms.awareness.fence.FenceUpdateRequest;
+import com.google.android.gms.awareness.fence.HeadphoneFence;
+import com.google.android.gms.awareness.fence.LocationFence;
+import com.google.android.gms.awareness.state.HeadphoneState;
+import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
+import com.google.android.gms.common.GooglePlayServicesRepairableException;
+import com.google.android.gms.location.places.Place;
+import com.google.android.gms.location.places.ui.PlacePicker;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.BuildConfig;
@@ -39,7 +59,7 @@ public class MainActivity extends AppCompatActivity
     final MainActivity self = this;
 
     // Used in checking for runtime permissions.
-    private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34; //TODO can be 12345??
+    private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34; //TODO should be 12345??
     private static final String[] permissionsArray = {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -49,6 +69,7 @@ public class MainActivity extends AppCompatActivity
     FloatingActionButton fab1;
     FloatingActionButton fab2;
 
+    private static final int PLACE_PICKER_REQUEST = 1;
 
     // A reference to the service used to get location updates.
     private StepTrackingService mService = null;
@@ -70,6 +91,7 @@ public class MainActivity extends AppCompatActivity
             mBound = false;
         }
     };
+
 
 
     @Override
@@ -104,6 +126,7 @@ public class MainActivity extends AppCompatActivity
             Intent serviceIntent = new Intent(this, StepTrackingService.class);
             startService(serviceIntent); //Activate onStartCommand
         }
+
     }
 
     @Override
@@ -147,7 +170,23 @@ public class MainActivity extends AppCompatActivity
         if (id == R.id.nav_camera) {
             // Handle the camera action
         } else if (id == R.id.nav_gallery) {
-
+            //Pick the location for home address
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
+                return false;
+            }
+            try {
+                // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
+                // when a place is selected or with the user cancels.
+                PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
+                //Intent i = builder.build(this);
+                startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
+            } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
+                Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
+            } catch (Exception e) {
+                Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
+            }
         } else if (id == R.id.nav_slideshow) {
 
         } else if (id == R.id.nav_manage) {
@@ -193,6 +232,7 @@ public class MainActivity extends AppCompatActivity
         // Restore the state of the buttons when the activity (re)launches.
         setButtonsState(AppUtils.requestingLocationUpdates(this));
 
+
         // Bind to the service. If the service is in foreground mode, this signals to the service
         // that since this activity is in the foreground, the service can exit foreground mode.
         bindService(new Intent(this, StepTrackingService.class), mServiceConnection,
@@ -211,6 +251,10 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onPause() {
 //        LocalBroadcastManager.getInstance(this).unregisterReceiver(myReceiver);
+//        if (myFenceReceiver != null) {
+//            unregisterReceiver(myFenceReceiver);
+//            myFenceReceiver = null;
+//        }
         super.onPause();
     }
 
@@ -225,7 +269,43 @@ public class MainActivity extends AppCompatActivity
         }
         PreferenceManager.getDefaultSharedPreferences(this)
                 .unregisterOnSharedPreferenceChangeListener(this);
+
+
+
         super.onStop();
+    }
+
+    /***
+     * Called when the Place Picker Activity returns back with a selected place (or after canceling)
+     *
+     * @param requestCode The request code passed when calling startActivityForResult
+     * @param resultCode  The result code specified by the second activity
+     * @param data        The Intent that carries the result data.
+     */
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == PLACE_PICKER_REQUEST && resultCode == RESULT_OK) {
+            Place place = PlacePicker.getPlace(this, data);
+            if (place == null) {
+                Log.i(TAG, "No place selected");
+                return;
+            }
+
+//            // Extract the place information from the API
+//            String placeName = place.getName().toString();
+//            String placeAddress = place.getAddress().toString();
+//            String placeID = place.getId();
+
+            //Temperately use sharedpreference
+            AppUtils.setPrefPlace(self,place);
+            Toast.makeText(self,getString(R.string.home_address_added), Toast.LENGTH_SHORT).show();
+//            // Insert a new place into DB TODO
+//            ContentValues contentValues = new ContentValues();
+//            contentValues.put(PlaceContract.PlaceEntry.COLUMN_PLACE_ID, placeID);
+//            getContentResolver().insert(PlaceContract.PlaceEntry.CONTENT_URI, contentValues);
+//
+//            // Get live data information
+//            refreshPlacesData();
+        }
     }
 
     @Override
@@ -236,6 +316,7 @@ public class MainActivity extends AppCompatActivity
                     false));
         }
     }
+
 
 
     /**
@@ -342,6 +423,4 @@ public class MainActivity extends AppCompatActivity
             fab2.hide();//.setEnabled(false);
         }
     }
-
-
 }

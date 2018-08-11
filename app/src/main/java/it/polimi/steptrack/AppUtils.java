@@ -4,11 +4,18 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.location.Location;
+import android.net.Uri;
 import android.preference.PreferenceManager;
+
+import com.google.android.gms.location.places.Place;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 
 import java.text.DateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
@@ -19,6 +26,11 @@ public class AppUtils {
     public final static String PREFS_NAME = "steptrack_prefs";
 
     public static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
+    public static final String KEY_PLACE_LAT = "place_lat";
+    public static final String KEY_PLACE_LON = "place_lon";
+    public static final String KEY_PLACE_PROVIDER = "place_provider";
+//    public static final String KEY_PLACE_ID = "place_id";
+
 
     /**
      * Returns if the service is running,running in foregound or not running
@@ -155,6 +167,38 @@ public class AppUtils {
 //        prefsEditor.putInt("stepCount", 0);
 //        prefsEditor.apply();
 //    }
+
+
+
+    //Save chosen place
+    public static void setPrefPlace(Context context, Place place){
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
+        if (place == null) {
+            sharedPreferences.edit().remove(KEY_PLACE_LAT).apply();
+            sharedPreferences.edit().remove(KEY_PLACE_LON).apply();
+        } else {
+            sharedPreferences.edit()
+                    .putLong(KEY_PLACE_LAT,Double.doubleToRawLongBits(place.getLatLng().latitude))
+                    .apply();
+
+            sharedPreferences.edit()
+                    .putLong(KEY_PLACE_LAT,Double.doubleToRawLongBits(place.getLatLng().longitude))
+                    .apply();
+        }
+
+    }
+
+    public static LatLng getPrefPlaceLatLng(Context context){
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
+        Double lat = Double.longBitsToDouble(sharedPreferences.getLong(KEY_PLACE_LAT, 0));
+        Double lon = Double.longBitsToDouble(sharedPreferences.getLong(KEY_PLACE_LON, 0));
+
+        LatLng latLng = null;
+        if( lat!=0 && lon !=0 ){
+            latLng = new LatLng(lat,lon);
+        }
+        return latLng;
+    }
 
     /** TODO organized in a better way
      * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone

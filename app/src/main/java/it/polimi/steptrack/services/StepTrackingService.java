@@ -1,14 +1,18 @@
 package it.polimi.steptrack.services;
 
+import android.Manifest;
 import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -22,21 +26,38 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.LocalBroadcastManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.google.android.gms.awareness.Awareness;
+import com.google.android.gms.awareness.fence.AwarenessFence;
+import com.google.android.gms.awareness.fence.DetectedActivityFence;
+import com.google.android.gms.awareness.fence.FenceState;
+import com.google.android.gms.awareness.fence.FenceUpdateRequest;
+import com.google.android.gms.awareness.fence.HeadphoneFence;
+import com.google.android.gms.awareness.fence.LocationFence;
+import com.google.android.gms.awareness.state.HeadphoneState;
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofencingEvent;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+
+import java.util.List;
 
 import it.polimi.steptrack.AppConstants;
 import it.polimi.steptrack.AppUtils;
+import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.ui.MainActivity;
 
@@ -45,7 +66,7 @@ import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppUtils.PREFS_NAME;
 
 public class StepTrackingService extends Service implements
-        SensorEventListener{
+        SensorEventListener {
     private static final String PACKAGE_NAME = "it.polimi.steptrack";
 
     private static final String TAG = StepTrackingService.class.getSimpleName();
@@ -78,6 +99,7 @@ public class StepTrackingService extends Service implements
     private boolean mChangingConfiguration = false;
     private NotificationManager mNotificationManager;
     private NotificationCompat.Builder mBuilder;
+    private String mNotifContentText;
     /**
      * Contains parameters used by {@link com.google.android.gms.location.FusedLocationProviderClient}.
      */
@@ -99,6 +121,16 @@ public class StepTrackingService extends Service implements
      * The current location.
      */
     private Location mLocation;
+
+    // The fence key is how callback code determines which fence fired.
+    private final String FENCE_KEY = "fence_key";
+    // The intent action which will be fired when your fence is triggered.
+    private final String FENCE_RECEIVER_ACTION =
+            BuildConfig.APPLICATION_ID + "FENCE_RECEIVER_ACTION";
+    // Declare variables for pending intent and fence receiver.
+    private PendingIntent myPendingIntent;
+    private MyFenceReceiver myFenceReceiver;
+
 
     public StepTrackingService() {
     }
@@ -153,6 +185,11 @@ public class StepTrackingService extends Service implements
             // Set the Notification Channel for the Notification Manager.
             mNotificationManager.createNotificationChannel(mChannel);
         }
+
+        Intent intent = new Intent(FENCE_RECEIVER_ACTION);
+        myPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
+        myFenceReceiver = new MyFenceReceiver();
+        registerReceiver(myFenceReceiver, new IntentFilter(FENCE_RECEIVER_ACTION));
     }
 
     //This is called only when there is Start service
@@ -191,6 +228,8 @@ public class StepTrackingService extends Service implements
         };
         sharedPreferences.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener);
 */
+        //start Monitoring activities and locations
+        setupFences();
 
         // Restart the service if its killed
         return START_STICKY;
@@ -233,7 +272,7 @@ public class StepTrackingService extends Service implements
         // Called when the last client (MainActivity in case of this sample) unbinds from this
         // service. If this method is called due to a configuration change in MainActivity, we
         // do nothing. Otherwise, we make this service a foreground service.
-        if (!mChangingConfiguration){//TODO: && AppUtils.requestingLocationUpdates(this)) {
+        if (!mChangingConfiguration) {//TODO: && AppUtils.requestingLocationUpdates(this)) {
             Log.i(TAG, "Starting foreground service");
             startForeground(NOTIFICATION_ID, getNotification(true)); //Anyway works for Oreo
         }
@@ -242,6 +281,26 @@ public class StepTrackingService extends Service implements
 
     @Override
     public void onDestroy() {
+        if (myFenceReceiver != null) {
+            unregisterReceiver(myFenceReceiver);
+            myFenceReceiver = null;
+        }
+        // Unregister the fence:
+        Awareness.getFenceClient(this).updateFences(new FenceUpdateRequest.Builder()
+                .removeFence(FENCE_KEY)
+                .build())
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Log.i(TAG, "Fence was successfully unregistered.");
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.e(TAG, "Fence could not be unregistered: " + e);
+                    }
+                });
         mServiceHandler.removeCallbacksAndMessages(null);
     }
 
@@ -286,13 +345,15 @@ public class StepTrackingService extends Service implements
     /**
      * Returns the {@link NotificationCompat} used as part of the foreground service.
      */
-    private Notification getNotification(boolean isFirstTime) {
-        if (isFirstTime){
+     private Notification getNotification(boolean isFirstTime) {
+         String msg = "Step Counter - Counting";
+        if (mNotifContentText != null)  msg = mNotifContentText;
+        if (isFirstTime) {
             // PendingIntent to launch activity.
-            PendingIntent activityPendingIntent = PendingIntent.getActivity(this,0,
+            PendingIntent activityPendingIntent = PendingIntent.getActivity(this, 0,
                     new Intent(this, MainActivity.class), 0);
             mBuilder.setContentIntent(activityPendingIntent)
-                    .setContentText("Step Counter - Counting")
+                    .setContentText(msg)
                     .setContentTitle(AppUtils.getLocationTitle(this))
                     .setOngoing(true)
                     .setPriority(Notification.PRIORITY_HIGH)
@@ -311,14 +372,14 @@ public class StepTrackingService extends Service implements
             }
         }
         // Update Step Count
+         mBuilder.setContentText(msg);
         mBuilder.setContentTitle(AppUtils.getStepCount(this) + " steps taken");
 
         return mBuilder.build();
     }
 
-
     private void getLastLocation() {
-        Log.w(TAG,"getting last location from onCreate");
+        Log.w(TAG, "getting last location from onCreate");
         try {
             mFusedLocationClient.getLastLocation()
                     .addOnCompleteListener(new OnCompleteListener<Location>() {
@@ -351,8 +412,8 @@ public class StepTrackingService extends Service implements
 //        if (serviceIsRunningInForeground(this)) {
 //            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
 //        }
-        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND){
-            mNotificationManager.notify(NOTIFICATION_ID,getNotification(true));
+        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
+            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
         }
     }
 
@@ -381,6 +442,13 @@ public class StepTrackingService extends Service implements
 
     }
 
+    public void updateNotification(String msg){
+        if (msg != null && mBuilder!= null) {
+            mNotifContentText = msg;
+            mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+        }
+    }
+
     /**
      * Class used for the client Binder.  Since this service runs in the same process as its
      * clients, we don't need to deal with IPC.
@@ -390,4 +458,94 @@ public class StepTrackingService extends Service implements
             return StepTrackingService.this;
         }
     }
+
+
+    /**
+     * Sets up {@link AwarenessFence}'s for the sample app, and registers callbacks for them
+     * with a custom {@link BroadcastReceiver}
+     */
+    private void setupFences() {
+        // DetectedActivityFence will fire when it detects the user performing the specified
+        // activity.  In this case it's walking.
+        AwarenessFence walkingFence = DetectedActivityFence.during(DetectedActivityFence.WALKING);
+        AwarenessFence headphoneFence = HeadphoneFence.during(HeadphoneState.PLUGGED_IN);
+
+        //Location for Home TODO!!!
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        AwarenessFence geoFence = LocationFence.exiting(45.472236, 9.227279, 25);
+        // We can even nest compound fences.  Using both "and" and "or" compound fences, this
+        // compound fence will determine when the user has headphones in and is engaging in at least
+        // one form of exercise.
+        // The below breaks down to "(headphones plugged in) AND (walking OR running OR bicycling)"
+        AwarenessFence outHomeFence = AwarenessFence.and(geoFence, AwarenessFence.or(
+                walkingFence,DetectedActivityFence.during(DetectedActivityFence.ON_FOOT)));
+
+        // Now that we have an interesting, complex condition, register the fence to receive
+        // callbacks.
+
+        // Register the fence to receive callbacks.
+        Awareness.getFenceClient(this).updateFences(new FenceUpdateRequest.Builder()
+                .addFence(FENCE_KEY, outHomeFence, myPendingIntent)
+                .build())
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Log.i(TAG, "Fence was successfully registered.");
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.e(TAG, "Fence could not be registered: " + e);
+                    }
+                });
+    }
+
+
+    // Handle the callback on the Intent.
+    public class MyFenceReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!TextUtils.equals(FENCE_RECEIVER_ACTION, intent.getAction())) {
+//                mLogFragment.getLogView()
+//                        .println("Received an unsupported action in FenceReceiver: action="
+//                                + intent.getAction());
+                Toast.makeText(context,"Received an unsupported action in FenceReceiver: action="
+                        + intent.getAction(), Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            FenceState fenceState = FenceState.extract(intent);
+            if (TextUtils.equals(fenceState.getFenceKey(), FENCE_KEY)) {
+                switch (fenceState.getCurrentState()) {
+                    case FenceState.TRUE:
+                        Log.i(TAG, "Walking out of home.");
+                        updateNotification("Walking out of home.");
+                        //mNotifContentText = "Walking out of home.";
+                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+                        break;
+                    case FenceState.FALSE:
+                        Log.i(TAG, "Walking back home.");
+                        updateNotification( "Walking back home");
+                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+                        break;
+                    case FenceState.UNKNOWN:
+                        Log.i(TAG, "unknown state.");
+                        updateNotification( "unknow state");
+                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+                        break;
+                }
+            }
+        }
+    }
+
 }
