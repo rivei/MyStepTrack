@@ -1,4 +1,4 @@
-package it.polimi.steptrack.roomdatabase.models;
+package it.polimi.steptrack.roomdatabase.entities;
 
 import android.arch.persistence.room.ColumnInfo;
 import android.arch.persistence.room.Entity;

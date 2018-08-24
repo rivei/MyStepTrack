@@ -7,8 +7,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import it.polimi.steptrack.roomdatabase.models.User;
-import it.polimi.steptrack.roomdatabase.models.User;
+import it.polimi.steptrack.roomdatabase.entities.User;
 
 import static android.arch.persistence.room.OnConflictStrategy.IGNORE;
 

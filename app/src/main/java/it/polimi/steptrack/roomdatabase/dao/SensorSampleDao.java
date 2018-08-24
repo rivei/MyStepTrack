@@ -7,7 +7,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import it.polimi.steptrack.roomdatabase.models.SensorSample;
+import it.polimi.steptrack.roomdatabase.entities.SensorSample;
 
 @Dao
 public interface SensorSampleDao {
@@ -19,4 +19,9 @@ public interface SensorSampleDao {
 
     @Query("SELECT * from samples ORDER BY session_id ASC")
     LiveData<List<SensorSample>> getAllSession();
+
+
+    @Insert
+    void insertMulti(SensorSample... samples);
+
 }

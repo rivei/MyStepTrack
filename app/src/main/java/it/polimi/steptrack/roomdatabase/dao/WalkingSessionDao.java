@@ -7,7 +7,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import it.polimi.steptrack.roomdatabase.models.WalkingSession;
+import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 
 @Dao
 public interface WalkingSessionDao {
@@ -18,6 +18,8 @@ public interface WalkingSessionDao {
     void deleteAll();
 
     @Query("SELECT * from sessions ORDER BY user_id ASC")
-    LiveData<List<WalkingSession>> getAllSession();
+    LiveData<List<WalkingSession>> getAllSessions();
 
+    @Query("SELECT * from sessions WHERE sid == :SessionId")
+    LiveData<WalkingSession> getSession(int SessionId);
 }

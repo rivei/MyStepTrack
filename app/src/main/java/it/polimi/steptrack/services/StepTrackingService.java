@@ -55,10 +55,16 @@ import com.google.android.gms.tasks.Task;
 
 import java.util.List;
 
+import it.polimi.steptrack.AccRepository;
 import it.polimi.steptrack.AppConstants;
 import it.polimi.steptrack.AppUtils;
+import it.polimi.steptrack.BasicApp;
 import it.polimi.steptrack.BuildConfig;
+import it.polimi.steptrack.DataRepository;
 import it.polimi.steptrack.R;
+import it.polimi.steptrack.roomdatabase.AppDatabase;
+import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.ui.MainActivity;
 
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
@@ -132,6 +138,17 @@ public class StepTrackingService extends Service implements
     private MyFenceReceiver myFenceReceiver;
 
 
+    private SensorManager mSensorManager;
+    private Sensor countSensor = null;
+    private Sensor accSensor = null;
+    //TODO: for database:
+    private AppDatabase mDB;
+    //private DataRepository mAccRepo;
+    private AccelerometerSample mAccSample;
+    private GPSLocation mGPSLocation;
+    private List<AccelerometerSample> mAccSamples;
+
+
     public StepTrackingService() {
     }
 
@@ -158,20 +175,21 @@ public class StepTrackingService extends Service implements
 
         //************************* For step count ~*********************//
         // Setup Step Counter
-        SensorManager sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        Sensor countSensor = null;
-        if (sensorManager != null) {
-            countSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (mSensorManager != null) {
+            countSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+            accSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
-            sensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
         } else {
             Toast.makeText(this, "Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
         }
 
-        // Get Notification Manager
+
+            // Get Notification Manager
         mBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
@@ -186,10 +204,14 @@ public class StepTrackingService extends Service implements
             mNotificationManager.createNotificationChannel(mChannel);
         }
 
-        Intent intent = new Intent(FENCE_RECEIVER_ACTION);
-        myPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
-        myFenceReceiver = new MyFenceReceiver();
-        registerReceiver(myFenceReceiver, new IntentFilter(FENCE_RECEIVER_ACTION));
+//        Intent intent = new Intent(FENCE_RECEIVER_ACTION);
+//        myPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
+//        myFenceReceiver = new MyFenceReceiver();
+//        registerReceiver(myFenceReceiver, new IntentFilter(FENCE_RECEIVER_ACTION));
+
+        //TODO: db
+        //mAccRepo = ((BasicApp)apl
+        mDB = AppDatabase.getInstance(this);
     }
 
     //This is called only when there is Start service
@@ -228,8 +250,8 @@ public class StepTrackingService extends Service implements
         };
         sharedPreferences.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener);
 */
-        //start Monitoring activities and locations
-        setupFences();
+        //TODO: start Monitoring activities and locations
+        //setupFences();
 
         // Restart the service if its killed
         return START_STICKY;
@@ -317,10 +339,19 @@ public class StepTrackingService extends Service implements
         try {
             mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                     mLocationCallback, Looper.myLooper());
+            //Add sensor listener:
         } catch (SecurityException unlikely) {
             mSessionStarted = false;
             AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
+        }
+        if (accSensor != null) {
+            //TODO: Accelerometer sensor registration listener
+            Toast.makeText(this, "Started Acceleration", Toast.LENGTH_LONG).show();
+            mSensorManager.registerListener(this, accSensor, SensorManager.SENSOR_DELAY_FASTEST);
+        } else {
+            Toast.makeText(this, "Accelerometer not Compatible!", Toast.LENGTH_LONG).show();
+            this.stopSelf();
         }
     }
 
@@ -335,11 +366,17 @@ public class StepTrackingService extends Service implements
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
             AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             //stopSelf(); //TODO: move this to the whole service
+
+
         } catch (SecurityException unlikely) {
             mSessionStarted = true;
             AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not remove updates. " + unlikely);
         }
+        //TODO: unregister sensor
+//        mSessionStarted = false;
+//        AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+        mSensorManager.unregisterListener(this);
     }
 
     /**
@@ -372,8 +409,12 @@ public class StepTrackingService extends Service implements
             }
         }
         // Update Step Count
-         mBuilder.setContentText(msg);
         mBuilder.setContentTitle(AppUtils.getStepCount(this) + " steps taken");
+        if(mSessionStarted){
+            //mBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
+        } else {
+            mBuilder.setContentText(msg);
+        }
 
         return mBuilder.build();
     }
@@ -402,7 +443,20 @@ public class StepTrackingService extends Service implements
         Log.i(TAG, "New location: " + location);
 
         mLocation = location;
-
+        if (mSessionStarted == true) {
+            mGPSLocation = new GPSLocation();
+            mGPSLocation.GTimestamp = location.getTime();
+            mGPSLocation.latitude = location.getLatitude();
+            mGPSLocation.longitude = location.getLongitude();
+            mGPSLocation.session_id = 111;
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    mDB.locationDao().insert(mGPSLocation);
+                    Log.w(TAG, "write GPS");
+                }
+            }).start();
+        }
 //        // Notify anyone listening for broadcasts about the new location.
 //        Intent intent = new Intent(ACTION_BROADCAST);
 //        intent.putExtra(EXTRA_LOCATION, location);
@@ -415,6 +469,7 @@ public class StepTrackingService extends Service implements
         if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
             mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
         }
+
     }
 
     /**
@@ -429,11 +484,40 @@ public class StepTrackingService extends Service implements
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        // Record Step Count
-        AppUtils.setStepCount(this, (int) sensorEvent.values[0]);
-        Log.i(TAG, AppUtils.getStepCount(this));
-        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
-            mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+        if(sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
+            // Record Step Count
+            AppUtils.setStepCount(this, (int) sensorEvent.values[0]);
+            Log.i(TAG, AppUtils.getStepCount(this));
+            if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
+                mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+            }
+        }
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            mAccSample = new AccelerometerSample();
+            mAccSample.SessionID = 111;
+            mAccSample.AsTimestamp = sensorEvent.timestamp;
+            mAccSample.mAccX = sensorEvent.values[0];
+            mAccSample.mAccY = sensorEvent.values[1];
+            mAccSample.mAccZ = sensorEvent.values[2];
+            // record acceleration
+            //mDB.accSampleDao().insert(mAccSample);
+            if (mSessionStarted == true) {
+                //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+/*                Thread t = new Thread() {
+                    public void run() {
+                        mDB.accSampleDao().insert(mAccSample);
+
+                    }
+                };
+                t.start();*/
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mDB.accSampleDao().insert(mAccSample);
+                        Log.w(TAG, "write ACC");
+                    }
+                }).start();
+            }
         }
     }
 
@@ -481,7 +565,7 @@ public class StepTrackingService extends Service implements
             // for ActivityCompat#requestPermissions for more details.
             return;
         }
-        AwarenessFence geoFence = LocationFence.exiting(45.472236, 9.227279, 25);
+        AwarenessFence geoFence = LocationFence.exiting(45.472518, 9.245972, 25);
         // We can even nest compound fences.  Using both "and" and "or" compound fences, this
         // compound fence will determine when the user has headphones in and is engaging in at least
         // one form of exercise.

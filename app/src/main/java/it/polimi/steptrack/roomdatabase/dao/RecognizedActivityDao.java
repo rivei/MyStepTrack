@@ -7,7 +7,7 @@ import android.arch.persistence.room.Query;
 
 import java.util.List;
 
-import it.polimi.steptrack.roomdatabase.models.RecognizedActivity;
+import it.polimi.steptrack.roomdatabase.entities.RecognizedActivity;
 
 @Dao
 public interface RecognizedActivityDao {
