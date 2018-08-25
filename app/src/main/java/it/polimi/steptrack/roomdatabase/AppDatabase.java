@@ -13,12 +13,11 @@ import android.support.annotation.NonNull;
 import it.polimi.steptrack.AppExecutors;
 import it.polimi.steptrack.roomdatabase.dao.AccelerometerSampleDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
-import it.polimi.steptrack.roomdatabase.dao.RecognizedActivityDao;
-import it.polimi.steptrack.roomdatabase.dao.SensorSampleDao;
+import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.UserDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
-import it.polimi.steptrack.roomdatabase.entities.RecognizedActivity;
+import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.SensorSample;
 import it.polimi.steptrack.roomdatabase.entities.User;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
@@ -29,7 +28,7 @@ import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
         GPSLocation.class,
         SensorSample.class,
         AccelerometerSample.class,
-        RecognizedActivity.class},
+        WalkingEvent.class},
         version = 1,
         exportSchema = false)
 @TypeConverters(DateConverter.class)
@@ -42,7 +41,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract WalkingSessionDao sessionDao();
     public abstract GPSLocationDao locationDao();
     public abstract AccelerometerSampleDao accSampleDao();
-    public abstract RecognizedActivityDao recognizedActivityDao();
+    public abstract WalkingEventDao walkingEventDao();
     private final MutableLiveData<Boolean> mIsDatabaseCreated = new MutableLiveData<>();
 
     public static AppDatabase getInstance(final Context context, final AppExecutors executors) {

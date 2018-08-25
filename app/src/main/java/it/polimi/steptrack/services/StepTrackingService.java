@@ -19,8 +19,10 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.location.Location;
+import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -31,6 +33,7 @@ import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.View;
 import android.widget.Toast;
 
 import com.google.android.gms.awareness.Awareness;
@@ -41,6 +44,15 @@ import com.google.android.gms.awareness.fence.FenceUpdateRequest;
 import com.google.android.gms.awareness.fence.HeadphoneFence;
 import com.google.android.gms.awareness.fence.LocationFence;
 import com.google.android.gms.awareness.state.HeadphoneState;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.ActivityRecognition;
+import com.google.android.gms.location.ActivityRecognitionClient;
+import com.google.android.gms.location.ActivityTransition;
+import com.google.android.gms.location.ActivityTransitionEvent;
+import com.google.android.gms.location.ActivityTransitionRequest;
+import com.google.android.gms.location.ActivityTransitionResult;
+import com.google.android.gms.location.DetectedActivity;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingEvent;
@@ -52,8 +64,15 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.common.api.Status;
+import com.google.android.gms.common.api.ResultCallback;
 
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import it.polimi.steptrack.AccRepository;
 import it.polimi.steptrack.AppConstants;
@@ -63,16 +82,19 @@ import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.DataRepository;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
+import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
+import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.ui.MainActivity;
 
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppUtils.PREFS_NAME;
 
-public class StepTrackingService extends Service implements
-        SensorEventListener {
+public class StepTrackingService extends Service
+        implements SensorEventListener {
+
     private static final String PACKAGE_NAME = "it.polimi.steptrack";
 
     private static final String TAG = StepTrackingService.class.getSimpleName();
@@ -137,6 +159,14 @@ public class StepTrackingService extends Service implements
     private PendingIntent myPendingIntent;
     private MyFenceReceiver myFenceReceiver;
 
+    /**
+     * For activity detection
+     */
+//    private ActivityRecognitionClient mActivityRecognitionClient; // The entry point for interacting with activity recognition.
+//    protected ActivityDetectionReceiver mBroadcastReceiver;
+    private PendingIntent mPendingIntent;
+    private TransitionsReceiver mTransitionsReceiver;
+
 
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
@@ -146,7 +176,8 @@ public class StepTrackingService extends Service implements
     //private DataRepository mAccRepo;
     private AccelerometerSample mAccSample;
     private GPSLocation mGPSLocation;
-    private List<AccelerometerSample> mAccSamples;
+    //private List<AccelerometerSample> mAccSamples;
+    private WalkingEvent mWalkingEvent;
 
 
     public StepTrackingService() {
@@ -189,7 +220,7 @@ public class StepTrackingService extends Service implements
         }
 
 
-            // Get Notification Manager
+        // Get Notification Manager
         mBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
@@ -208,6 +239,15 @@ public class StepTrackingService extends Service implements
 //        myPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
 //        myFenceReceiver = new MyFenceReceiver();
 //        registerReceiver(myFenceReceiver, new IntentFilter(FENCE_RECEIVER_ACTION));
+
+        //******************** Activity Detection *************************************//
+//        mActivityRecognitionClient = new ActivityRecognitionClient(this);
+//        mBroadcastReceiver = new ActivityDetectionReceiver();
+        Intent intent = new Intent(AppConstants.TRANSITIONS_RECEIVER_ACTION);
+        mPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
+        mTransitionsReceiver = new TransitionsReceiver();
+        registerReceiver(mTransitionsReceiver, new IntentFilter(AppConstants.TRANSITIONS_RECEIVER_ACTION));
+
 
         //TODO: db
         //mAccRepo = ((BasicApp)apl
@@ -252,6 +292,7 @@ public class StepTrackingService extends Service implements
 */
         //TODO: start Monitoring activities and locations
         //setupFences();
+        setupActivityTransitions();
 
         // Restart the service if its killed
         return START_STICKY;
@@ -323,7 +364,31 @@ public class StepTrackingService extends Service implements
                         Log.e(TAG, "Fence could not be unregistered: " + e);
                     }
                 });
+
+
+        // Unregister the transitions: (TODO: in Activity.onPause)
+        ActivityRecognition.getClient(this).removeActivityTransitionUpdates(mPendingIntent)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Log.i(TAG, "Transitions successfully unregistered.");
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.e(TAG, "Transitions could not be unregistered: " + e);
+                    }
+                });
+        //TODO: Activity.onStop
+        if (mTransitionsReceiver != null) {
+            unregisterReceiver(mTransitionsReceiver);
+            mTransitionsReceiver = null;
+        }
+
         mServiceHandler.removeCallbacksAndMessages(null);
+
+        super.onDestroy();
     }
 
     /**
@@ -382,9 +447,9 @@ public class StepTrackingService extends Service implements
     /**
      * Returns the {@link NotificationCompat} used as part of the foreground service.
      */
-     private Notification getNotification(boolean isFirstTime) {
-         String msg = "Step Counter - Counting";
-        if (mNotifContentText != null)  msg = mNotifContentText;
+    private Notification getNotification(boolean isFirstTime) {
+        String msg = "Step Counter - Counting";
+        if (mNotifContentText != null) msg = mNotifContentText;
         if (isFirstTime) {
             // PendingIntent to launch activity.
             PendingIntent activityPendingIntent = PendingIntent.getActivity(this, 0,
@@ -410,7 +475,7 @@ public class StepTrackingService extends Service implements
         }
         // Update Step Count
         mBuilder.setContentTitle(AppUtils.getStepCount(this) + " steps taken");
-        if(mSessionStarted){
+        if (mSessionStarted) {
             //mBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
         } else {
             mBuilder.setContentText(msg);
@@ -484,7 +549,7 @@ public class StepTrackingService extends Service implements
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        if(sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
             // Record Step Count
             AppUtils.setStepCount(this, (int) sensorEvent.values[0]);
             Log.i(TAG, AppUtils.getStepCount(this));
@@ -526,8 +591,8 @@ public class StepTrackingService extends Service implements
 
     }
 
-    public void updateNotification(String msg){
-        if (msg != null && mBuilder!= null) {
+    public void updateNotification(String msg) {
+        if (msg != null && mBuilder != null) {
             mNotifContentText = msg;
             mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
         }
@@ -571,7 +636,7 @@ public class StepTrackingService extends Service implements
         // one form of exercise.
         // The below breaks down to "(headphones plugged in) AND (walking OR running OR bicycling)"
         AwarenessFence outHomeFence = AwarenessFence.and(geoFence, AwarenessFence.or(
-                walkingFence,DetectedActivityFence.during(DetectedActivityFence.ON_FOOT)));
+                walkingFence, DetectedActivityFence.during(DetectedActivityFence.ON_FOOT)));
 
         // Now that we have an interesting, complex condition, register the fence to receive
         // callbacks.
@@ -603,7 +668,7 @@ public class StepTrackingService extends Service implements
 //                mLogFragment.getLogView()
 //                        .println("Received an unsupported action in FenceReceiver: action="
 //                                + intent.getAction());
-                Toast.makeText(context,"Received an unsupported action in FenceReceiver: action="
+                Toast.makeText(context, "Received an unsupported action in FenceReceiver: action="
                         + intent.getAction(), Toast.LENGTH_LONG).show();
                 return;
             }
@@ -619,17 +684,142 @@ public class StepTrackingService extends Service implements
                         break;
                     case FenceState.FALSE:
                         Log.i(TAG, "Walking back home.");
-                        updateNotification( "Walking back home");
+                        updateNotification("Walking back home");
                         //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
                         break;
                     case FenceState.UNKNOWN:
                         Log.i(TAG, "unknown state.");
-                        updateNotification( "unknow state");
+                        updateNotification("unknow state");
                         //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
                         break;
                 }
             }
         }
     }
+
+
+    //***************** Activity detection ***************************//
+//    private static String toActivityString(int activity) {
+//        switch (activity) {
+//            case DetectedActivity.STILL:
+//                return "STILL";
+//            case DetectedActivity.WALKING:
+//                return "WALKING";
+//            default:
+//                return "UNKNOWN";
+//        }
+//    }
+//
+    private static String toTransitionType(int transitionType) {
+        switch (transitionType) {
+            case ActivityTransition.ACTIVITY_TRANSITION_ENTER:
+                return "Start Walking";
+            case ActivityTransition.ACTIVITY_TRANSITION_EXIT:
+                return "Stop Walking";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
+    /**
+     * Sets up {@link ActivityTransitionRequest}'s for the sample app, and registers callbacks for them
+     * with a custom {@link BroadcastReceiver}
+     */
+    private void setupActivityTransitions() {
+        List<ActivityTransition> transitions = new ArrayList<>();
+        transitions.add(
+                new ActivityTransition.Builder()
+                        .setActivityType(DetectedActivity.WALKING)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                        .build());
+        transitions.add(
+                new ActivityTransition.Builder()
+                        .setActivityType(DetectedActivity.WALKING)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
+                        .build());
+        ActivityTransitionRequest request = new ActivityTransitionRequest(transitions);
+
+        // Register for Transitions Updates.
+        Task<Void> task =
+                ActivityRecognition.getClient(this)
+                        .requestActivityTransitionUpdates(request, mPendingIntent);
+        task.addOnSuccessListener(
+                new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void result) {
+                        Log.i(TAG, "Transitions Api was successfully registered.");
+                    }
+                });
+        task.addOnFailureListener(
+                new OnFailureListener() {
+                    @Override
+                    public void onFailure(Exception e) {
+                        Log.e(TAG, "Transitions Api could not be registered: " + e);
+                    }
+                });
+    }
+
+    /**
+     * A basic BroadcastReceiver to handle intents from from the Transitions API.
+     */
+    public class TransitionsReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!TextUtils.equals(AppConstants.TRANSITIONS_RECEIVER_ACTION, intent.getAction())) {
+//                mLogFragment.getLogView()
+//                        .println("Received an unsupported action in TransitionsReceiver: action="
+//                                + intent.getAction());
+                Toast.makeText(context, "Received an unsupported action in TransitionsReceiver: action="
+                        + intent.getAction(), Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (ActivityTransitionResult.hasResult(intent)) {
+                ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
+                if (result != null) {
+                    for (ActivityTransitionEvent event : result.getTransitionEvents()) {
+//                        String activity = toActivityString(event.getActivityType());
+//                        String transitionType = toTransitionType(event.getTransitionType());
+//                        mLogFragment.getLogView()
+//                                .println("Transition: "
+//                                        + activity + " (" + transitionType + ")" + "   "
+//                                        + new SimpleDateFormat("HH:mm:ss", Locale.US)
+//                                        .format(new Date()));
+                        mWalkingEvent = new WalkingEvent();
+                        mWalkingEvent.WeTimestamp = System.currentTimeMillis();
+                        mWalkingEvent.mTransition = event.getTransitionType();
+                        mWalkingEvent.mElapsedTime = event.getElapsedRealTimeNanos();
+                        Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
+                                Toast.LENGTH_LONG).show();
+                        //TODO: write db -> crashed it says it's in main thread.??
+//                        new Thread(new Runnable() {
+//                            @Override
+//                            public void run() {
+//                                //TODO:
+//                                mDB.walkingEventDao().insert(mWalkingEvent);
+//
+//                            }
+//                        }).run();
+                        new insertAsyncTask(mDB.walkingEventDao()).execute(mWalkingEvent);
+                    }
+                }
+            }
+        }
+    }
+
+    private static class insertAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
+
+        private WalkingEventDao mAsyncTaskDao;
+
+        insertAsyncTask(WalkingEventDao dao) {
+            mAsyncTaskDao = dao;
+        }
+
+        @Override
+        protected Void doInBackground(WalkingEvent... walkingEvents) {
+            mAsyncTaskDao.insert(walkingEvents[0]);
+            return null;
+        }
+    }
+
 
 }

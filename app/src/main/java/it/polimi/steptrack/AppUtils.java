@@ -7,11 +7,16 @@ import android.location.Location;
 import android.net.Uri;
 import android.preference.PreferenceManager;
 
+import com.google.android.gms.location.DetectedActivity;
 import com.google.android.gms.location.places.Place;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
+import java.lang.reflect.Type;
 import java.text.DateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
@@ -222,5 +227,23 @@ public class AppUtils {
         c.set(Calendar.SECOND, 1);
         c.set(Calendar.MILLISECOND, 0);
         return c.getTimeInMillis();
+    }
+
+
+    /**
+     * For activity detection
+     */
+    static String detectedActivitiesToJson(ArrayList<DetectedActivity> detectedActivitiesList) {
+        Type type = new TypeToken<ArrayList<DetectedActivity>>() {}.getType();
+        return new Gson().toJson(detectedActivitiesList, type);
+    }
+
+    static ArrayList<DetectedActivity> detectedActivitiesFromJson(String jsonArray) {
+        Type listType = new TypeToken<ArrayList<DetectedActivity>>(){}.getType();
+        ArrayList<DetectedActivity> detectedActivities = new Gson().fromJson(jsonArray, listType);
+        if (detectedActivities == null) {
+            detectedActivities = new ArrayList<>();
+        }
+        return detectedActivities;
     }
 }
