@@ -19,7 +19,7 @@ public class GPSLocation {
     public long GTimestamp;
 
     @ColumnInfo
-    public int session_id;
+    public long session_id;
 
     @ColumnInfo
     public double latitude;

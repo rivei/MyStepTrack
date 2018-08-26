@@ -20,7 +20,7 @@ public class AccelerometerSample {
     public long AsTimestamp;
 
     @ColumnInfo(name = "session_id")
-    public int SessionID;
+    public long SessionID;
 
     @ColumnInfo(name = "acc_x")
     public float mAccX;

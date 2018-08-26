@@ -5,6 +5,7 @@ import android.arch.persistence.room.Dao;
 import android.arch.persistence.room.Insert;
 import android.arch.persistence.room.Query;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
@@ -15,6 +16,9 @@ import static android.arch.persistence.room.OnConflictStrategy.IGNORE;
 public interface AccelerometerSampleDao {
     @Insert (onConflict = IGNORE)
     void insert(AccelerometerSample accSample);
+
+    @Insert (onConflict = IGNORE)
+    void insert(List<AccelerometerSample> accSamples);
 
     @Query("DELETE FROM acc_samples")
     void deleteAll();

@@ -91,6 +91,7 @@ import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
+import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
@@ -194,6 +195,8 @@ public class StepTrackingService extends Service
     private GPSLocation mGPSLocation;
     //private List<AccelerometerSample> mAccSamples;
     private WalkingEvent mWalkingEvent;
+    private WalkingSession mWalkingSession;
+    private long mWalkingSessionId = -1;
 
 
     public StepTrackingService() {
@@ -457,6 +460,23 @@ public class StepTrackingService extends Service
             AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
         }
+        mWalkingSession = new WalkingSession();
+        mWalkingSession.mStartTime = System.currentTimeMillis();
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                mWalkingSessionId = mDB.sessionDao().insert(mWalkingSession);
+//                mWalkingSession.sid = mWalkingSessionId;
+//            }
+//        }).run();
+        Thread t = new Thread() {
+            public void run() {
+                mWalkingSessionId = mDB.sessionDao().insert(mWalkingSession);
+                mWalkingSession.sid = mWalkingSessionId;
+            }
+        };
+        t.start();
+
         if (accSensor != null) {
             //TODO: Accelerometer sensor registration listener
             Toast.makeText(this, "Started Acceleration", Toast.LENGTH_LONG).show();
@@ -488,6 +508,25 @@ public class StepTrackingService extends Service
         //TODO: unregister sensor
 //        mSessionStarted = false;
 //        AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+        if (mWalkingSession.sid != -1) {
+            mWalkingSession.mEndTime = System.currentTimeMillis();
+            mWalkingSession.mDuration = mWalkingSession.mEndTime - mWalkingSession.mStartTime;
+            SharedPreferences prefs = this.getSharedPreferences(PREFS_NAME, 0);
+            mWalkingSession.mStepCount = prefs.getInt("stepCount", 0);
+//            new Thread(new Runnable() {
+//                @Override
+//                public void run() {
+//                    mDB.sessionDao().update(mWalkingSession);
+//                }
+//            }).run();
+            Thread t = new Thread() {
+                public void run() {
+                    mDB.sessionDao().update(mWalkingSession);
+                }
+            };
+            t.start();
+            mWalkingSessionId = -1;
+        }
         mSensorManager.unregisterListener(this);
     }
 
@@ -555,12 +594,12 @@ public class StepTrackingService extends Service
         Log.i(TAG, "New location: " + location);
 
         mLocation = location;
-        if (mSessionStarted == true) {
+        if (mSessionStarted && mWalkingSessionId != -1 ) {
             mGPSLocation = new GPSLocation();
             mGPSLocation.GTimestamp = location.getTime();
             mGPSLocation.latitude = location.getLatitude();
             mGPSLocation.longitude = location.getLongitude();
-            mGPSLocation.session_id = 111;
+            mGPSLocation.session_id = mWalkingSessionId;
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -605,16 +644,17 @@ public class StepTrackingService extends Service
             }
         }
         if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            mAccSample = new AccelerometerSample();
-            mAccSample.SessionID = 111;
-            mAccSample.AsTimestamp = sensorEvent.timestamp;
-            mAccSample.mAccX = sensorEvent.values[0];
-            mAccSample.mAccY = sensorEvent.values[1];
-            mAccSample.mAccZ = sensorEvent.values[2];
-            // record acceleration
-            //mDB.accSampleDao().insert(mAccSample);
-            if (mSessionStarted) {
-                //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+            if (mWalkingSession.sid != -1) {
+                mAccSample = new AccelerometerSample();
+                mAccSample.SessionID = mWalkingSessionId;
+                mAccSample.AsTimestamp = sensorEvent.timestamp;
+                mAccSample.mAccX = sensorEvent.values[0];
+                mAccSample.mAccY = sensorEvent.values[1];
+                mAccSample.mAccZ = sensorEvent.values[2];
+                // record acceleration
+                //mDB.accSampleDao().insert(mAccSample);
+                if (mSessionStarted) {
+                    //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
 /*                Thread t = new Thread() {
                     public void run() {
                         mDB.accSampleDao().insert(mAccSample);
@@ -622,13 +662,14 @@ public class StepTrackingService extends Service
                     }
                 };
                 t.start();*/
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        mDB.accSampleDao().insert(mAccSample);
-                        Log.w(TAG, "write ACC");
-                    }
-                }).start();
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mDB.accSampleDao().insert(mAccSample);
+                            Log.w(TAG, "write ACC");
+                        }
+                    }).start();
+                }
             }
         }
     }

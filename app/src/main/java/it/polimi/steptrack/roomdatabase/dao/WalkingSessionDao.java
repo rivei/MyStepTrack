@@ -4,6 +4,7 @@ import android.arch.lifecycle.LiveData;
 import android.arch.persistence.room.Dao;
 import android.arch.persistence.room.Insert;
 import android.arch.persistence.room.Query;
+import android.arch.persistence.room.Update;
 
 import java.util.List;
 
@@ -12,7 +13,10 @@ import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 @Dao
 public interface WalkingSessionDao {
     @Insert
-    void insert(WalkingSession wksession);
+    long insert(WalkingSession wksession);
+
+    @Update
+    void update(WalkingSession wksession);
 
     @Query("DELETE FROM sessions")
     void deleteAll();

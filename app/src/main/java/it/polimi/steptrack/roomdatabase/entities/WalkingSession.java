@@ -8,17 +8,17 @@ import android.arch.persistence.room.PrimaryKey;
 
 
 @Entity (tableName = "sessions",
-        foreignKeys = {@ForeignKey(entity = User.class,
-                parentColumns = "uid",
-                childColumns = "user_id",
-                onUpdate = ForeignKey.CASCADE,
-                onDelete = ForeignKey.CASCADE)},
+//        foreignKeys = {@ForeignKey(entity = User.class,
+//                parentColumns = "uid",
+//                childColumns = "user_id",
+//                onUpdate = ForeignKey.CASCADE,
+//                onDelete = ForeignKey.CASCADE)},
         indices = {@Index(value = {"sid", "user_id"}, unique = true)}
 )
 public class WalkingSession {
 
     @PrimaryKey(autoGenerate = true)
-    public int sid;
+    public long sid;
 
     @ColumnInfo(name = "user_id")
     public int userId;
