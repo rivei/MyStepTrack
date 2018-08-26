@@ -27,4 +27,7 @@
         Geofence transition error: invalid transition type %1$d
     </string>
     <string name="home_address_added">Home address added</string>
+    <string name="geofences_added">Geofences added</string>
+    <string name="geofences_removed">Geofences removed</string>
+
 </resources>

@@ -13,10 +13,12 @@ import android.support.annotation.NonNull;
 import it.polimi.steptrack.AppExecutors;
 import it.polimi.steptrack.roomdatabase.dao.AccelerometerSampleDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
+import it.polimi.steptrack.roomdatabase.dao.GeoFencingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.UserDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.SensorSample;
 import it.polimi.steptrack.roomdatabase.entities.User;
@@ -26,6 +28,7 @@ import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 @Database(entities = {User.class,
         WalkingSession.class,
         GPSLocation.class,
+        GeoFencingEvent.class,
         SensorSample.class,
         AccelerometerSample.class,
         WalkingEvent.class},
@@ -42,6 +45,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract GPSLocationDao locationDao();
     public abstract AccelerometerSampleDao accSampleDao();
     public abstract WalkingEventDao walkingEventDao();
+    public abstract GeoFencingEventDao geoFencingEventDao();
     private final MutableLiveData<Boolean> mIsDatabaseCreated = new MutableLiveData<>();
 
     public static AppDatabase getInstance(final Context context, final AppExecutors executors) {

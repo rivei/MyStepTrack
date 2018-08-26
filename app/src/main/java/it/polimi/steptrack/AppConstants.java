@@ -66,4 +66,8 @@ public final class AppConstants {
             DetectedActivity.UNKNOWN
     };
 
+    public static final String GEOFENCES_ADDED_KEY = PACKAGE_NAME + ".GEOFENCES_ADDED_KEY";
+    public static final float GEOFENCE_RADIUS_IN_METERS = 25; // 1 mile, 1.6 km
+
+
 }
