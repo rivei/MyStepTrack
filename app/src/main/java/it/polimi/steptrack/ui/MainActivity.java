@@ -12,6 +12,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
@@ -47,9 +48,20 @@ import com.google.android.gms.location.places.ui.PlacePicker;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.R;
+import it.polimi.steptrack.roomdatabase.AppDatabase;
+import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.services.DataExportIntentService;
 import it.polimi.steptrack.services.StepTrackingService;
 
 public class MainActivity extends AppCompatActivity
@@ -63,8 +75,9 @@ public class MainActivity extends AppCompatActivity
     private static final String[] permissionsArray = {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.RECEIVE_BOOT_COMPLETED
-    };
+            Manifest.permission.RECEIVE_BOOT_COMPLETED,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+};
 
     FloatingActionButton fab1;
     FloatingActionButton fab2;
@@ -92,6 +105,11 @@ public class MainActivity extends AppCompatActivity
         }
     };
 
+    /* Checks if external storage is available for read and write */
+    public boolean isExternalStorageWritable() {
+        String state = Environment.getExternalStorageState();
+        return Environment.MEDIA_MOUNTED.equals(state);
+    }
 
 
     @Override
@@ -114,6 +132,10 @@ public class MainActivity extends AppCompatActivity
         if(!checkPermissions()){
             requestPermissions();
         }
+
+        WelcomeFragment fragment = new WelcomeFragment();
+        getSupportFragmentManager().beginTransaction()
+                .add(R.id.fragment_container, fragment, WelcomeFragment.TAG).commit();
 
         //TODO: *** Start service for counting steps
         // Check if the service is running
@@ -168,7 +190,10 @@ public class MainActivity extends AppCompatActivity
         int id = item.getItemId();
 
         if (id == R.id.nav_camera) {
-            // Handle the camera action
+            WelcomeFragment fragment = new WelcomeFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_container, fragment, WelcomeFragment.TAG)
+                    .commit();
         } else if (id == R.id.nav_gallery) {
             //Pick the location for home address
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
@@ -188,8 +213,17 @@ public class MainActivity extends AppCompatActivity
                 Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
             }
         } else if (id == R.id.nav_slideshow) {
-
+            //TODO: Export all data
+            Log.w(TAG, "Going to export data");
+//            Intent createFileIntent = new Intent(this, DataExportIntentService.class);
+//            startService(createFileIntent);
+//            Log.w(TAG,"FINISHED??");
+            ExportData();
         } else if (id == R.id.nav_manage) {
+            WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG)
+                    .commit();
 
         } else if (id == R.id.nav_share) {
 
@@ -422,5 +456,60 @@ public class MainActivity extends AppCompatActivity
             fab1.show();//.setEnabled(true);
             fab2.hide();//.setEnabled(false);
         }
+    }
+
+    private void ExportData(){
+        if(!isExternalStorageWritable()){
+            Log.w(TAG, "External memory not available");
+            return;
+        }
+
+        Log.w(TAG, "Prepare to read DB");
+        Thread t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (AccelerometerSample sample : mDB.accSampleDao().getAllSamplesSynchronous()) {
+                    rawDataList.add(sample.toString());
+                }
+                String filename = "alldata.txt";//"Insoles - " + sessionDate;
+                File f;
+
+                FileOutputStream outputStream;
+                final String header = "user_id, session_id, start_time, end_time，step_count，step_detect" +
+                        "，distance，average_speed，duration，tag \n";
+
+                try {
+                    f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), filename);
+                    outputStream = new FileOutputStream(f);
+
+                    // Print header
+                    outputStream.write(header.getBytes());
+                    // Print Raw Data
+                    for (String s : rawDataList) {
+                        outputStream.write(
+                                (s != null) ? s.getBytes() : "Data NULL".getBytes()
+                        );
+                        outputStream.write("\n".getBytes());
+                    }
+
+                    outputStream.close();
+                    Log.e(TAG, "Output Stream Closed");
+
+                    Toast.makeText(self, "Export finished", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+        t.start();
+    }
+
+    private List<String> Acc2String(AppDatabase db) {
+        List<String> strings = null;
+        for (AccelerometerSample sample : db.accSampleDao().getAllSamplesSynchronous()) {
+            strings.add(sample.toString());
+        }
+        return strings;
     }
 }

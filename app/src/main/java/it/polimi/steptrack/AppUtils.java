@@ -22,6 +22,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import it.polimi.steptrack.roomdatabase.AppDatabase;
+import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
+
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEPTRACKINGSERVICE;
@@ -245,5 +249,13 @@ public class AppUtils {
             detectedActivities = new ArrayList<>();
         }
         return detectedActivities;
+    }
+
+    public static List<String> Acc2String(AppDatabase db) {
+        List<String> strings = null;
+        for (AccelerometerSample sample : db.accSampleDao().getAllSamplesSynchronous()) {
+            strings.add(sample.toString());
+        }
+        return strings;
     }
 }

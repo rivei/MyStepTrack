@@ -47,5 +47,18 @@ public class WalkingSession {
     @ColumnInfo(name = "tag")
     public String mTag;
 
+    @Override
+    public String toString(){
+        return userId + ", " +
+                sid + ", " +
+                mStartTime + ", " +
+                mEndTime + ", " +
+                mStepCount + ", " +
+                mStepDetect + ", " +
+                mDistance + ", " +
+                mAverageSpeed + ", " +
+                mDuration + ", " +
+                mTag;
+    }
 
 }

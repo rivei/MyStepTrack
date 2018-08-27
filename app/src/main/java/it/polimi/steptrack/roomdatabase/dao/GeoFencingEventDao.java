@@ -21,5 +21,5 @@ public interface GeoFencingEventDao {
     void deleteAll();
 
     @Query("SELECT * from geofencing_events ORDER BY GeTimestamp ASC")
-    LiveData<List<GeoFencingEvent>> getAllActivities();
+    LiveData<List<GeoFencingEvent>> getAllFences();
 }

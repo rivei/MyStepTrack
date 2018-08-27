@@ -8,11 +8,11 @@ import android.arch.persistence.room.PrimaryKey;
 
 
 @Entity(tableName = "acc_samples",
-//        foreignKeys = {@ForeignKey(entity = WalkingSession.class,
-//                parentColumns = "sid",
-//                childColumns = "session_id",
-//                onUpdate = ForeignKey.CASCADE,
-//                onDelete = ForeignKey.CASCADE)},
+        foreignKeys = {@ForeignKey(entity = WalkingSession.class,
+                parentColumns = "sid",
+                childColumns = "session_id",
+                onUpdate = ForeignKey.CASCADE,
+                onDelete = ForeignKey.CASCADE)},
         indices = {@Index(value = {"AsTimestamp","session_id"},unique = true)}
 )
 public class AccelerometerSample {
@@ -34,5 +34,13 @@ public class AccelerometerSample {
 //    public AccelerometerSample(int sessionID) {
 //        SessionID = sessionID;
 //    }
+    @Override
+    public String toString(){
+        return SessionID + ", " +
+                AsTimestamp + "," +
+                mAccX + ", " +
+                mAccY + ", " +
+                mAccZ;
+    }
 }
 

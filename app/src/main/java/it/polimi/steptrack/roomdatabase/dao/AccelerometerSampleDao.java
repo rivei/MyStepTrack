@@ -24,10 +24,12 @@ public interface AccelerometerSampleDao {
     void deleteAll();
 
     @Query("SELECT * from acc_samples ORDER BY session_id ASC")
-    LiveData<List<AccelerometerSample>> getAllSession();
+    LiveData<List<AccelerometerSample>> getAllSamples();
+
+    @Query("SELECT * from acc_samples ORDER BY session_id ASC")
+    List<AccelerometerSample> getAllSamplesSynchronous();
 
 
     @Insert(onConflict = IGNORE)
     void insertSamples(AccelerometerSample... accsamples);
-
 }

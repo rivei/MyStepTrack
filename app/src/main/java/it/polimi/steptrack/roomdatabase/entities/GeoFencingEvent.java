@@ -12,4 +12,9 @@ public class GeoFencingEvent {
     @ColumnInfo(name = "transition")
     public int mTransition;
 
+    @Override
+    public String toString(){
+        return GeTimestamp + ", " + mTransition;
+    }
+
 }

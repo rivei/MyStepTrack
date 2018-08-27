@@ -15,4 +15,12 @@ public class WalkingEvent {
 
     @ColumnInfo (name = "elapsed_time")
     public long mElapsedTime;
+
+    @Override
+    public String toString(){
+        return WeTimestamp + ", " +
+                mTransition + ", " +
+                mElapsedTime;
+    }
+
 }
