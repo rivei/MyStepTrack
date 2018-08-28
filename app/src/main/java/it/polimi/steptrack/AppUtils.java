@@ -5,7 +5,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.net.Uri;
+import android.os.Environment;
 import android.preference.PreferenceManager;
+import android.util.Log;
+import android.widget.Toast;
 
 import com.google.android.gms.location.DetectedActivity;
 import com.google.android.gms.location.places.Place;
@@ -14,6 +17,8 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.lang.reflect.Type;
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -29,6 +34,7 @@ import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEPTRACKINGSERVICE;
+import static java.lang.Math.round;
 
 public class AppUtils {
     // Identify Shared Preference Store
@@ -178,10 +184,9 @@ public class AppUtils {
 //    }
 
 
-
     //Save chosen place
     public static void setPrefPlace(Context context, Place place){
-        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
         if (place == null) {
             sharedPreferences.edit().remove(KEY_PLACE_LAT).apply();
             sharedPreferences.edit().remove(KEY_PLACE_LON).apply();
@@ -191,14 +196,14 @@ public class AppUtils {
                     .apply();
 
             sharedPreferences.edit()
-                    .putLong(KEY_PLACE_LAT,Double.doubleToRawLongBits(place.getLatLng().longitude))
+                    .putLong(KEY_PLACE_LON,Double.doubleToRawLongBits(place.getLatLng().longitude))
                     .apply();
+            Toast.makeText(context, "Place pref set", Toast.LENGTH_LONG).show();
         }
-
     }
 
     public static LatLng getPrefPlaceLatLng(Context context){
-        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
         Double lat = Double.longBitsToDouble(sharedPreferences.getLong(KEY_PLACE_LAT, 0));
         Double lon = Double.longBitsToDouble(sharedPreferences.getLong(KEY_PLACE_LON, 0));
 
@@ -257,5 +262,27 @@ public class AppUtils {
             strings.add(sample.toString());
         }
         return strings;
+    }
+
+    public static void writeFile(String filename, String fileheader, List<String> dataList){
+        FileOutputStream outputStream;
+        File f;
+        try {
+            f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), filename);
+            outputStream = new FileOutputStream(f);
+
+            // Print header
+            outputStream.write(fileheader.getBytes());
+            // Print Raw Data
+            for (String s : dataList) {
+                outputStream.write(
+                        (s != null) ? s.getBytes() : "NULL".getBytes()
+                );
+                outputStream.write("\n".getBytes());
+            }
+            outputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

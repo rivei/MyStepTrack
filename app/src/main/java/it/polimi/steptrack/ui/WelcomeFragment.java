@@ -1,13 +1,18 @@
 package it.polimi.steptrack.ui;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
+import com.google.android.gms.maps.model.LatLng;
+
+import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 
 /**
@@ -20,6 +25,9 @@ import it.polimi.steptrack.R;
  */
 public class WelcomeFragment extends Fragment {
     public final static String TAG = WelcomeFragment.class.getSimpleName();
+
+    private Context mContext;
+    TextView tvSteps;
 
     // TODO: Rename parameter arguments, choose names that match
     // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
@@ -66,8 +74,18 @@ public class WelcomeFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
+        View rootView = inflater.inflate(R.layout.fragment_welcome, container, false);
+        mContext = rootView.getContext();
+
+        tvSteps = rootView.findViewById(R.id.tvSteps);
+        LatLng coordinate = AppUtils.getPrefPlaceLatLng(mContext);
+        if(coordinate != null) {
+            tvSteps.setText("Home is" + coordinate.toString());
+        }else{
+            tvSteps.setText("Home address unknown");
+        }
         // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_welcome, container, false);
+        return rootView;//inflater.inflate(R.layout.fragment_welcome, container, false);
     }
 
 //    // TODO: Rename method, update argument and hook method into UI event
@@ -108,5 +126,8 @@ public class WelcomeFragment extends Fragment {
 //        // TODO: Update argument type and name
 //        void onFragmentInteraction(Uri uri);
 //    }
-
+    public void setHomeCoordinate(LatLng coordinate){
+        //String homeCor = coordinate.toString();
+        tvSteps.setText("Home is: "+ coordinate.toString());
+    }
 }

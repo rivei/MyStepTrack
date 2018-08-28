@@ -22,4 +22,8 @@ public interface GeoFencingEventDao {
 
     @Query("SELECT * from geofencing_events ORDER BY GeTimestamp ASC")
     LiveData<List<GeoFencingEvent>> getAllFences();
+
+    @Query("SELECT * from geofencing_events ORDER BY GeTimestamp ASC")
+    List<GeoFencingEvent> getAllFencesSynchronous();
+
 }

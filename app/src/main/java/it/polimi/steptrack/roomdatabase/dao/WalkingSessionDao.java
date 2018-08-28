@@ -24,6 +24,9 @@ public interface WalkingSessionDao {
     @Query("SELECT * from sessions ORDER BY user_id ASC")
     LiveData<List<WalkingSession>> getAllSessions();
 
+    @Query("SELECT * from sessions ORDER BY user_id ASC")
+    List<WalkingSession> getAllSessionsSynchronous();
+
     @Query("SELECT * from sessions WHERE sid == :SessionId")
     LiveData<WalkingSession> getSession(int SessionId);
 }

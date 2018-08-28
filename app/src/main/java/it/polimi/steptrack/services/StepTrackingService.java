@@ -1,7 +1,5 @@
 package it.polimi.steptrack.services;
 
-import android.Manifest;
-import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -12,7 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -22,33 +19,18 @@ import android.location.Location;
 import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
-import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.View;
 import android.widget.Toast;
 
-import com.google.android.gms.awareness.Awareness;
-import com.google.android.gms.awareness.fence.AwarenessFence;
-import com.google.android.gms.awareness.fence.DetectedActivityFence;
-import com.google.android.gms.awareness.fence.FenceState;
-import com.google.android.gms.awareness.fence.FenceUpdateRequest;
-import com.google.android.gms.awareness.fence.HeadphoneFence;
-import com.google.android.gms.awareness.fence.LocationFence;
-import com.google.android.gms.awareness.state.HeadphoneState;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.ActivityRecognition;
-import com.google.android.gms.location.ActivityRecognitionClient;
 import com.google.android.gms.location.ActivityTransition;
 import com.google.android.gms.location.ActivityTransitionEvent;
 import com.google.android.gms.location.ActivityTransitionRequest;
@@ -63,26 +45,18 @@ import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
-import com.google.android.gms.common.api.Status;
-import com.google.android.gms.common.api.ResultCallback;
 
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
-import it.polimi.steptrack.AccRepository;
 import it.polimi.steptrack.AppConstants;
 import it.polimi.steptrack.AppUtils;
-import it.polimi.steptrack.BasicApp;
-import it.polimi.steptrack.BuildConfig;
-import it.polimi.steptrack.DataRepository;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.dao.GeoFencingEventDao;
@@ -94,7 +68,6 @@ import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
-import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppUtils.PREFS_NAME;
 
@@ -183,11 +156,18 @@ public class StepTrackingService extends Service
     // Used when requesting to add or remove geofences.
     private PendingIntent mGeofencePendingIntent;
     private GeoFencingEvent mGeofencingEvent;
-
+    private LatLng mHomeCoordinate = null;
 
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
     private Sensor accSensor = null;
+    private long sensorTimeRef1 = -1L;
+    private long sensorTimeRef2 = -1L;
+    private long sysTimeRef1 = -1L;
+    private long sysTimeRef2 = -1L;
+    private long startoffset = -1L;
+    private long rateoffset = -1L;
+
     //TODO: for database:
     private AppDatabase mDB;
     //private DataRepository mAccRepo;
@@ -273,26 +253,28 @@ public class StepTrackingService extends Service
         mGeofenceList = new ArrayList<>();
         // Initially set the PendingIntent used in addGeofences() and removeGeofences() to null.
         mGeofencePendingIntent = null;
-        mGeofenceList.add(new Geofence.Builder()
-            // Set the request ID of the geofence. This is a string to identify this
-            // geofence.
-            .setRequestId("Home")
-            // Set the circular region of this geofence.
-            .setCircularRegion( //TODO: change home adress!!
-                    45.472518, 9.245972,
-                    AppConstants.GEOFENCE_RADIUS_IN_METERS
-            )
-            // Set the expiration duration of the geofence. This geofence gets automatically
-            // removed after this period of time.
-            .setExpirationDuration(Geofence.NEVER_EXPIRE)
-            // Set the transition types of interest. Alerts are only generated for these
-            // transition. We track entry and exit transitions in this sample.
-            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER |
-                    Geofence.GEOFENCE_TRANSITION_EXIT)
-            // Create the geofence.
-            .build());
-        Log.w(TAG, "Geofence added");//errorMessage);
-
+        mHomeCoordinate = AppUtils.getPrefPlaceLatLng(this);
+        if(mHomeCoordinate != null) {
+            mGeofenceList.add(new Geofence.Builder()
+                    // Set the request ID of the geofence. This is a string to identify this
+                    // geofence.
+                    .setRequestId("Home")
+                    // Set the circular region of this geofence.
+                    .setCircularRegion( //TODO: change home adress!!
+                            mHomeCoordinate.latitude, mHomeCoordinate.latitude,
+                            AppConstants.GEOFENCE_RADIUS_IN_METERS
+                    )
+                    // Set the expiration duration of the geofence. This geofence gets automatically
+                    // removed after this period of time.
+                    .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                    // Set the transition types of interest. Alerts are only generated for these
+                    // transition. We track entry and exit transitions in this sample.
+                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER |
+                            Geofence.GEOFENCE_TRANSITION_EXIT)
+                    // Create the geofence.
+                    .build());
+            Log.w(TAG, "Geofence added");//errorMessage);
+        }
         mGeofencingClient = LocationServices.getGeofencingClient(this);
 
 
@@ -340,7 +322,10 @@ public class StepTrackingService extends Service
         //TODO: start Monitoring activities and locations
         //setupFences();
         setupActivityTransitions();
-        addGeofences();
+        if (mHomeCoordinate != null) {
+            //TODO: make better this logic
+            addGeofences();
+        }
 
         // Restart the service if its killed
         return START_STICKY;
@@ -434,7 +419,9 @@ public class StepTrackingService extends Service
             mTransitionsReceiver = null;
         }
 
-        removeGeofences();
+        if(mHomeCoordinate != null) {
+            removeGeofences();
+        }
 
         mServiceHandler.removeCallbacksAndMessages(null);
 
@@ -528,6 +515,9 @@ public class StepTrackingService extends Service
             mWalkingSessionId = -1;
         }
         mSensorManager.unregisterListener(this);
+        clearSensorOffset();
+        //Never stop step counter sensor listening
+        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
     }
 
     /**
@@ -644,31 +634,36 @@ public class StepTrackingService extends Service
             }
         }
         if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            if (mWalkingSession.sid != -1) {
-                mAccSample = new AccelerometerSample();
-                mAccSample.SessionID = mWalkingSessionId;
-                mAccSample.AsTimestamp = sensorEvent.timestamp;
-                mAccSample.mAccX = sensorEvent.values[0];
-                mAccSample.mAccY = sensorEvent.values[1];
-                mAccSample.mAccZ = sensorEvent.values[2];
-                // record acceleration
-                //mDB.accSampleDao().insert(mAccSample);
-                if (mSessionStarted) {
-                    //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-/*                Thread t = new Thread() {
-                    public void run() {
-                        mDB.accSampleDao().insert(mAccSample);
-
-                    }
-                };
-                t.start();*/
-                    new Thread(new Runnable() {
-                        @Override
+            setupSensorOffset(sensorEvent.timestamp);
+            if(startoffset > 0 && rateoffset > 0){
+                if (mWalkingSession.sid != -1) {
+                    mAccSample = new AccelerometerSample();
+                    mAccSample.SessionID = mWalkingSessionId;
+                    mAccSample.AsTimestamp = (sensorEvent.timestamp - sensorTimeRef1) / rateoffset + sysTimeRef1;//+
+    //                        ((sensorEvent.timestamp - sensorTimeReference)/1000000L);
+    //                mAccSample.AsTimestamp = sensorEvent.timestamp;
+                    mAccSample.mAccX = sensorEvent.values[0];
+                    mAccSample.mAccY = sensorEvent.values[1];
+                    mAccSample.mAccZ = sensorEvent.values[2];
+                    // record acceleration
+                    //mDB.accSampleDao().insert(mAccSample);
+                    if (mSessionStarted) {
+                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+    /*                Thread t = new Thread() {
                         public void run() {
                             mDB.accSampleDao().insert(mAccSample);
-                            Log.w(TAG, "write ACC");
+
                         }
-                    }).start();
+                    };
+                    t.start();*/
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mDB.accSampleDao().insert(mAccSample);
+                                Log.w(TAG, "write ACC: " + mAccSample.AsTimestamp);
+                            }
+                        }).start();
+                    }
                 }
             }
         }
@@ -1029,6 +1024,12 @@ public class StepTrackingService extends Service
          */
         @Override
         public void onReceive(Context context, Intent intent) {
+//            if (!TextUtils.equals(, intent.getAction())) {
+//                Toast.makeText(context, "Received an unsupported action in GeofenceReceiver: action="
+//                        + intent.getAction(), Toast.LENGTH_LONG).show();
+//                return;
+//            }
+
             // Enqueues a JobIntentService passing the context and intent as parameters
             //GeofenceTransitionsJobIntentService.enqueueWork(context, intent);
             GeofencingEvent geofencingEvent = GeofencingEvent.fromIntent(intent);
@@ -1037,6 +1038,7 @@ public class StepTrackingService extends Service
                         //geofencingEvent.getErrorCode());
                 //Log.e(TAG, errorMessage);
                 Log.e(TAG, "Geofence error");
+                Toast.makeText(context, "Geofence error", Toast.LENGTH_LONG).show();
                 return;
             }
 
@@ -1050,7 +1052,14 @@ public class StepTrackingService extends Service
                 mGeofencingEvent = new GeoFencingEvent();
                 mGeofencingEvent.GeTimestamp = System.currentTimeMillis();
                 mGeofencingEvent.mTransition = geofenceTransition;
-                new insertFenceAsyncTask(mDB.geoFencingEventDao()).execute(mGeofencingEvent);
+                //new insertFenceAsyncTask(mDB.geoFencingEventDao()).execute(mGeofencingEvent);
+
+//                WelcomeFragment fragment = (WelcomeFragment)context().
+//                        findFragmentByTag(WelcomeFragment.TAG);
+//                //findFragmentById(R.id.fragment_container);
+//                if(fragment != null){
+//                    fragment.setHomeCoordinate(place.getLatLng());
+//                }
 
                 // TODO: Fencing is always Home
                 // Get the geofences that were triggered. A single event can trigger multiple geofences.
@@ -1062,8 +1071,11 @@ public class StepTrackingService extends Service
                 //TODO: Send notification and log the transition details.
                 //sendNotification(geofenceTransitionDetails);
                 Log.i(TAG, geofenceTransitionDetails);
+                Toast.makeText(context,geofenceTransitionDetails,Toast.LENGTH_LONG).show();
             } else {
                 // Log the error.
+                Toast.makeText(context,getString(R.string.geofence_transition_invalid_type,
+                        geofenceTransition),Toast.LENGTH_LONG).show();
                 Log.e(TAG, getString(R.string.geofence_transition_invalid_type, geofenceTransition));
             }
 
@@ -1126,4 +1138,29 @@ public class StepTrackingService extends Service
         }
     }
 
+
+    private void setupSensorOffset(long timestamp){
+        if(sensorTimeRef1 == -1L && sysTimeRef1 == -1L){
+            sensorTimeRef1 = timestamp;
+            sysTimeRef1 = System.currentTimeMillis();
+        }
+        if(sysTimeRef2 == -1L && System.currentTimeMillis() - sysTimeRef1 > 0){
+            sysTimeRef2 = System.currentTimeMillis();
+            sensorTimeRef2 = timestamp;
+            rateoffset = (sensorTimeRef2 - sensorTimeRef1)/(sysTimeRef2 - sysTimeRef1);
+            rateoffset = rateoffset > 1000 ? 1000000L : 1;
+            startoffset = sysTimeRef1 - sensorTimeRef1/rateoffset;
+//            Log.e(TAG, "rate offset:" + rateoffset);
+//            Log.e(TAG, "system time delta: " + (sysTimeRef2 - sysTimeRef1));
+//            Log.e(TAG, "sensor time delta:" + (sensorTimeRef2 - sensorTimeRef1));
+        }
+    }
+    private void clearSensorOffset(){
+        sensorTimeRef1 = -1L;
+        sensorTimeRef2 = -1L;
+        sysTimeRef1 = -1L;
+        sysTimeRef2 = -1L;
+        rateoffset = -1L;
+        startoffset = -1L;
+    }
 }

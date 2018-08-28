@@ -23,4 +23,7 @@ public interface GPSLocationDao
 
     @Query("SELECT * from locations ORDER BY session_id ASC")
     LiveData<List<GPSLocation>> getAllLocation();
+
+    @Query("SELECT * from locations ORDER BY session_id ASC")
+    List<GPSLocation> getAllLocationSynchronous();
 }

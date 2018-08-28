@@ -31,6 +31,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.awareness.Awareness;
@@ -45,6 +46,7 @@ import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.location.places.Place;
 import com.google.android.gms.location.places.ui.PlacePicker;
+import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
@@ -61,6 +63,10 @@ import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
+import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
+import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
+import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.services.DataExportIntentService;
 import it.polimi.steptrack.services.StepTrackingService;
 
@@ -137,6 +143,16 @@ public class MainActivity extends AppCompatActivity
         getSupportFragmentManager().beginTransaction()
                 .add(R.id.fragment_container, fragment, WelcomeFragment.TAG).commit();
 
+        if (fragment != null) {
+            //TextView tvSteps = fragment.getView().findViewById(R.id.tvSteps);
+//            LatLng coordinate = AppUtils.getPrefPlaceLatLng(self);
+//            if (coordinate != null) {
+//                //tvSteps.setText("Home is" + coordinate.toString());
+//                fragment.setHomeCoordinate(coordinate);
+//            } else {
+//                //tvSteps.setText("Home address unknown");
+//            }
+        }
         //TODO: *** Start service for counting steps
         // Check if the service is running
         if (AppUtils.getServiceRunningStatus(self) <= 0) {
@@ -325,12 +341,16 @@ public class MainActivity extends AppCompatActivity
             }
 
 //            // Extract the place information from the API
-//            String placeName = place.getName().toString();
-//            String placeAddress = place.getAddress().toString();
-//            String placeID = place.getId();
-
             //Temperately use sharedpreference
             AppUtils.setPrefPlace(self,place);
+            WelcomeFragment fragment = (WelcomeFragment)getSupportFragmentManager().
+                    findFragmentByTag(WelcomeFragment.TAG);
+                    //findFragmentById(R.id.fragment_container);
+            if(fragment != null){
+                fragment.setHomeCoordinate(place.getLatLng());
+//                TextView textView = fragment.getView().findViewById(R.id.tvSteps);
+//                textView.setText("Home is: " + place.getLatLng().toString());
+            }
             Toast.makeText(self,getString(R.string.home_address_added), Toast.LENGTH_SHORT).show();
 //            // Insert a new place into DB TODO
 //            ContentValues contentValues = new ContentValues();
@@ -349,6 +369,7 @@ public class MainActivity extends AppCompatActivity
             setButtonsState(sharedPreferences.getBoolean(AppUtils.KEY_REQUESTING_LOCATION_UPDATES,
                     false));
         }
+        //if (s.equals(AppUtils.KEY_PLACE_LAT))
     }
 
 
@@ -472,44 +493,64 @@ public class MainActivity extends AppCompatActivity
                 for (AccelerometerSample sample : mDB.accSampleDao().getAllSamplesSynchronous()) {
                     rawDataList.add(sample.toString());
                 }
-                String filename = "alldata.txt";//"Insoles - " + sessionDate;
-                File f;
-
-                FileOutputStream outputStream;
-                final String header = "user_id, session_id, start_time, end_time，step_count，step_detect" +
-                        "，distance，average_speed，duration，tag \n";
-
-                try {
-                    f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), filename);
-                    outputStream = new FileOutputStream(f);
-
-                    // Print header
-                    outputStream.write(header.getBytes());
-                    // Print Raw Data
-                    for (String s : rawDataList) {
-                        outputStream.write(
-                                (s != null) ? s.getBytes() : "Data NULL".getBytes()
-                        );
-                        outputStream.write("\n".getBytes());
-                    }
-
-                    outputStream.close();
-                    Log.e(TAG, "Output Stream Closed");
-
-                    Toast.makeText(self, "Export finished", Toast.LENGTH_LONG).show();
-                } catch (Exception e) {
-                    e.printStackTrace();
+                String filename = "accSamples.csv";//"Insoles - " + sessionDate;
+                final String header = "session_id, timestamp, acc_x, acc_y, acc_z \n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (GeoFencingEvent event : mDB.geoFencingEventDao().getAllFencesSynchronous()) {
+                    rawDataList.add(event.toString());
                 }
+                String filename = "Geofences.csv";
+                final String header = "timestamp, transition \n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (GPSLocation location : mDB.locationDao().getAllLocationSynchronous()) {
+                    rawDataList.add(location.toString());
+                }
+                String filename = "Locations.csv";
+                final String header = "session_id, GTimestamp,latitude, longitude \n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (WalkingEvent event : mDB.walkingEventDao().getAllActivitiesSynchronous()) {
+                    rawDataList.add(event.toString());
+                }
+                String filename = "iswalking.csv";
+                final String header = "timestamp,transition, elapse_time \n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (WalkingSession session : mDB.sessionDao().getAllSessionsSynchronous()) {
+                    rawDataList.add(session.toString());
+                }
+                String filename = "walkingsession.csv";
+                final String header = "user_Id, session_id, StartTime, EndTime, StepCount, StepDetect, Distance, AverageSpeed, Duration, Tag \n";
+                AppUtils.writeFile(filename, header, rawDataList);
             }
         };
         t.start();
     }
 
-    private List<String> Acc2String(AppDatabase db) {
-        List<String> strings = null;
-        for (AccelerometerSample sample : db.accSampleDao().getAllSamplesSynchronous()) {
-            strings.add(sample.toString());
-        }
-        return strings;
-    }
 }

@@ -22,4 +22,7 @@ public interface WalkingEventDao {
 
     @Query("SELECT * from walking_events ORDER BY WeTimestamp ASC")
     LiveData<List<WalkingEvent>> getAllActivities();
+
+    @Query("SELECT * from walking_events ORDER BY WeTimestamp ASC")
+    List<WalkingEvent> getAllActivitiesSynchronous();
 }
