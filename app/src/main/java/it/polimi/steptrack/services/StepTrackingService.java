@@ -177,6 +177,7 @@ public class StepTrackingService extends Service
     private WalkingEvent mWalkingEvent;
     private WalkingSession mWalkingSession;
     private long mWalkingSessionId = -1;
+    private int mStepsCount = 0;
 
 
     public StepTrackingService() {
@@ -218,6 +219,7 @@ public class StepTrackingService extends Service
             this.stopSelf();
         }
 
+        mStepsCount = AppUtils.getLastStepCount(this) - AppUtils.getStepCountOffset(this);
 
         // Get Notification Manager
         mBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
@@ -325,6 +327,11 @@ public class StepTrackingService extends Service
         if (mHomeCoordinate != null) {
             //TODO: make better this logic
             addGeofences();
+        }
+
+//        //TODO: make the notification works when the service resume from phone reboot
+        if (!AppUtils.getKeyActivityActive(this)){
+            startForeground(NOTIFICATION_ID, getNotification(true));
         }
 
         // Restart the service if its killed
@@ -435,7 +442,8 @@ public class StepTrackingService extends Service
     public void requestLocationUpdates() {
         mSessionStarted = true;
         Log.i(TAG, "Requesting location updates");
-        AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+        //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+        AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
         //TODO-NOTE: here makes the call for onStartCommand.
         //startService(new Intent(getApplicationContext(), StepTrackingService.class));
         try {
@@ -444,7 +452,8 @@ public class StepTrackingService extends Service
             //Add sensor listener:
         } catch (SecurityException unlikely) {
             mSessionStarted = false;
-            AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
         }
         mWalkingSession = new WalkingSession();
@@ -483,19 +492,20 @@ public class StepTrackingService extends Service
         try {
             mSessionStarted = false;
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-            AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
             //stopSelf(); //TODO: move this to the whole service
-
 
         } catch (SecurityException unlikely) {
             mSessionStarted = true;
-            AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+            AppUtils.setKeyStartingWalkingSession(this,mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not remove updates. " + unlikely);
         }
         //TODO: unregister sensor
 //        mSessionStarted = false;
 //        AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
-        if (mWalkingSession.sid != -1) {
+        if (mWalkingSessionId != -1) {
             mWalkingSession.mEndTime = System.currentTimeMillis();
             mWalkingSession.mDuration = mWalkingSession.mEndTime - mWalkingSession.mStartTime;
             SharedPreferences prefs = this.getSharedPreferences(PREFS_NAME, 0);
@@ -550,7 +560,7 @@ public class StepTrackingService extends Service
             }
         }
         // Update Step Count
-        mBuilder.setContentTitle(AppUtils.getStepCount(this) + " steps taken");
+        mBuilder.setContentTitle(mStepsCount + " steps taken");
         if (mSessionStarted) {
             //mBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
         } else {
@@ -589,6 +599,8 @@ public class StepTrackingService extends Service
             mGPSLocation.GTimestamp = location.getTime();
             mGPSLocation.latitude = location.getLatitude();
             mGPSLocation.longitude = location.getLongitude();
+            //location.getProvider();
+            //location.getAccuracy();
             mGPSLocation.session_id = mWalkingSessionId;
             new Thread(new Runnable() {
                 @Override
@@ -627,8 +639,9 @@ public class StepTrackingService extends Service
     public void onSensorChanged(SensorEvent sensorEvent) {
         if (sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
             // Record Step Count
-            AppUtils.setStepCount(this, (int) sensorEvent.values[0]);
-            Log.i(TAG, AppUtils.getStepCount(this));
+            mStepsCount = (int)sensorEvent.values[0] - AppUtils.getStepCountOffset(this);
+            AppUtils.setKeyLastStepCount(this, mStepsCount);
+            Log.i(TAG, "steps: " + mStepsCount);
             if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
                 mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
             }
@@ -636,7 +649,7 @@ public class StepTrackingService extends Service
         if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
             setupSensorOffset(sensorEvent.timestamp);
             if(startoffset > 0 && rateoffset > 0){
-                if (mWalkingSession.sid != -1) {
+                if (mWalkingSessionId != -1) {
                     mAccSample = new AccelerometerSample();
                     mAccSample.SessionID = mWalkingSessionId;
                     mAccSample.AsTimestamp = (sensorEvent.timestamp - sensorTimeRef1) / rateoffset + sysTimeRef1;//+

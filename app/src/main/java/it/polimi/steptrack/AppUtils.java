@@ -31,29 +31,26 @@ import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 
+import static it.polimi.steptrack.AppConstants.SERVICE_NOT_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEPTRACKINGSERVICE;
 import static java.lang.Math.round;
 
+/**
+ * A class for App sharedpreference management
+ */
 public class AppUtils {
     // Identify Shared Preference Store
     public final static String PREFS_NAME = "steptrack_prefs";
 
-    public static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
-    public static final String KEY_PLACE_LAT = "place_lat";
-    public static final String KEY_PLACE_LON = "place_lon";
-    public static final String KEY_PLACE_PROVIDER = "place_provider";
-//    public static final String KEY_PLACE_ID = "place_id";
-
-
     /**
      * Returns if the service is running,running in foregound or not running
      * @param context The {@link Context}.
-     * @return
+     * @return the satatus of the running service
      */
     public static int getServiceRunningStatus(Context context){
-        int status = 0;
+        int status = SERVICE_NOT_RUNNING;
         ActivityManager manager = (ActivityManager) context.getSystemService(
                 Context.ACTIVITY_SERVICE);
         if(manager != null){
@@ -62,16 +59,87 @@ public class AppUtils {
                 if(STEPTRACKINGSERVICE.equals(service.service.getClassName())){
                     status = SERVICE_RUNNING;
                     if (service.foreground) status = SERVICE_RUNNING_FOREGROUND;
-
                     break;
                 }
             }
         }
-
         return status;
     }
 
+    public static final String KEY_ACTIVITY_ACTIVE = "activity_active";
+    public static boolean getKeyActivityActive(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(KEY_ACTIVITY_ACTIVE, false);
+    }
+    public static void setKeyActivityActive(Context context, boolean activityActive){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(KEY_ACTIVITY_ACTIVE, activityActive)
+                .apply();
+    }
 
+    public static final String KEY_PHONE_REBOOT = "phone_reboot";
+    public static boolean getKeyPhoneReboot(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(KEY_PHONE_REBOOT, false);
+    }
+    public static void setKeyPhoneReboot(Context context, boolean phoneReboot){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(KEY_PHONE_REBOOT,phoneReboot)
+                .apply();
+    }
+
+
+    public static final String KEY_STARTING_WALKING_SESSION = "starting_walking_session";
+    public static boolean startingWalkingSession(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(KEY_STARTING_WALKING_SESSION, false);
+    }
+
+    public static void setKeyStartingWalkingSession(Context context, boolean startingWalkingSession){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(KEY_STARTING_WALKING_SESSION, startingWalkingSession)
+                .apply();
+    }
+
+    /**
+     * For continous step counting
+     */
+    public static final String KEY_STEP_COUNT_OFFSET = "step_offset";
+    public static int getStepCountOffset(Context context) {
+        //step counts to be subtracted
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getInt(KEY_STEP_COUNT_OFFSET, 0);
+    }
+
+    public static void setStepCountOffset(Context context, int stepsOffset) {
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putInt(KEY_STEP_COUNT_OFFSET,stepsOffset)
+                .apply();
+    }
+
+    public static final String KEY_LAST_STEP_COUNT = "last_step_count";
+    public static int getLastStepCount(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getInt(KEY_LAST_STEP_COUNT,0);
+    }
+    public static void setKeyLastStepCount(Context context, int lastStepCount){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putInt(KEY_LAST_STEP_COUNT, lastStepCount)
+                .apply();
+    }
+
+
+
+
+    /**
+     * For location
+     */
+    public static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
 
     /**
      * Returns true if requesting location updates, otherwise returns false.
@@ -136,66 +204,45 @@ public class AppUtils {
         return distance;
     }
 
-    /*** For step counts ********/
-
-    // Should the Step Counting Service be running?
-    public static boolean shouldServiceRun(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-        return prefs.getBoolean("serviceRunning", false);
-    }
-
-    // Should the Step Counting Service be running?
-    public static void setServiceRun(Context context, boolean running) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-        SharedPreferences.Editor prefsEditor = prefs.edit();
-        prefsEditor.putBoolean("serviceRunning", running);
-        prefsEditor.apply();
-    }
-
-    // How many steps have I walked?
-    public static String getStepCount(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-        return String.format("%,d", (prefs.getInt("stepCount", 0) - prefs.getInt("stepCountSubtract", 0)));
-    }
-
-    // Set how many steps I have walked.
-    public static void setStepCount(Context context, Integer steps) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-        SharedPreferences.Editor prefsEditor = prefs.edit();
-        prefsEditor.putInt("stepCount", steps);
-        prefsEditor.apply();
-    }
-
-//    // Set Subtract Step Count (Reset)
-//    public static void resetStepCount(Context context) {
+//    /*** For step counts ********/
+//
+//    // Should the Step Counting Service be running?
+//    public static boolean shouldServiceRun(Context context) {
 //        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-//        SharedPreferences.Editor prefsEditor = prefs.edit();
-//        prefsEditor.putInt("stepCountSubtract", prefs.getInt("stepCount", 0));
-//        prefsEditor.apply();
+//        return prefs.getBoolean("serviceRunning", false);
 //    }
 //
-//    // Reset the Subtract Step Count (On Boot)
-//    public static void clearStepCount(Context context) {
+//    // Should the Step Counting Service be running?
+//    public static void setServiceRun(Context context, boolean running) {
 //        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
 //        SharedPreferences.Editor prefsEditor = prefs.edit();
-//        prefsEditor.putInt("stepCountSubtract", 0);
-//        prefsEditor.putInt("stepCount", 0);
+//        prefsEditor.putBoolean("serviceRunning", running);
 //        prefsEditor.apply();
 //    }
 
+
+    /**
+     * For Geofencing
+     */
+    public static final String KEY_PLACE_LAT = "place_lat";
+    public static final String KEY_PLACE_LON = "place_lon";
 
     //Save chosen place
     public static void setPrefPlace(Context context, Place place){
-        SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
+        //SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
         if (place == null) {
-            sharedPreferences.edit().remove(KEY_PLACE_LAT).apply();
-            sharedPreferences.edit().remove(KEY_PLACE_LON).apply();
+            PreferenceManager.getDefaultSharedPreferences(context)
+                    .edit().remove(KEY_PLACE_LAT).apply();
+            PreferenceManager.getDefaultSharedPreferences(context)
+                    .edit().remove(KEY_PLACE_LON).apply();
         } else {
-            sharedPreferences.edit()
+            PreferenceManager.getDefaultSharedPreferences(context)
+                    .edit()
                     .putLong(KEY_PLACE_LAT,Double.doubleToRawLongBits(place.getLatLng().latitude))
                     .apply();
 
-            sharedPreferences.edit()
+            PreferenceManager.getDefaultSharedPreferences(context)
+                    .edit()
                     .putLong(KEY_PLACE_LON,Double.doubleToRawLongBits(place.getLatLng().longitude))
                     .apply();
             Toast.makeText(context, "Place pref set", Toast.LENGTH_LONG).show();
@@ -203,9 +250,11 @@ public class AppUtils {
     }
 
     public static LatLng getPrefPlaceLatLng(Context context){
-        SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
-        Double lat = Double.longBitsToDouble(sharedPreferences.getLong(KEY_PLACE_LAT, 0));
-        Double lon = Double.longBitsToDouble(sharedPreferences.getLong(KEY_PLACE_LON, 0));
+        //SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
+        Double lat = Double.longBitsToDouble(PreferenceManager.getDefaultSharedPreferences(context)
+                .getLong(KEY_PLACE_LAT, 0));
+        Double lon = Double.longBitsToDouble(PreferenceManager.getDefaultSharedPreferences(context)
+                .getLong(KEY_PLACE_LON, 0));
 
         LatLng latLng = null;
         if( lat!=0 && lon !=0 ){

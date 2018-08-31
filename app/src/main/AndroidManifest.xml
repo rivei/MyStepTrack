@@ -13,10 +13,13 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
 
     <!-- Permission Required for Starting the Step Counter at Boot -->
+    <!--<uses-permission android:name="android.permission.REBOOT"/>-->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
@@ -46,17 +49,27 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_key" />
-        <meta-data
+        <!-- For place picker -->
+<!--        <meta-data
             android:name="com.google.android.awareness.API_KEY"
-            android:value="AIzaSyAZKvV26Fare-9Lkjv-zSJlwBWzq0w6pI8"/>
+            android:value="AIzaSyAZKvV26Fare-9Lkjv-zSJlwBWzq0w6pI8"/>-->
+        <!-- For awareness API -->
 
 
-        <service android:name=".services.StepTrackingService" />
+        <service android:name=".services.StepTrackingService"
+            android:enabled="true"/>
+        <service android:name=".services.StepTrackingService2" />
 
 
-        <receiver android:name=".receivers.BootReceiver">
+        <receiver android:name=".receivers.ServiceRestartReceiver">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name=".RestartSensor"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".receivers.PhoneShutdownReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_SHUTDOWN"/>
             </intent-filter>
         </receiver>
     </application>

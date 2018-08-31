@@ -20,6 +20,8 @@ import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -34,21 +36,11 @@ import android.view.MenuItem;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.android.gms.awareness.Awareness;
-import com.google.android.gms.awareness.fence.AwarenessFence;
-import com.google.android.gms.awareness.fence.DetectedActivityFence;
-import com.google.android.gms.awareness.fence.FenceState;
-import com.google.android.gms.awareness.fence.FenceUpdateRequest;
-import com.google.android.gms.awareness.fence.HeadphoneFence;
-import com.google.android.gms.awareness.fence.LocationFence;
-import com.google.android.gms.awareness.state.HeadphoneState;
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.location.places.Place;
 import com.google.android.gms.location.places.ui.PlacePicker;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -61,6 +53,7 @@ import java.util.ListIterator;
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.R;
+import it.polimi.steptrack.receivers.ServiceRestartReceiver;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
@@ -72,7 +65,9 @@ import it.polimi.steptrack.services.StepTrackingService;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener,
-        SharedPreferences.OnSharedPreferenceChangeListener{
+                    SharedPreferences.OnSharedPreferenceChangeListener,
+                    StatusFragment.OnStatusInteractionListener,
+                    SettingFragment.OnSettingFragmentInteractionListener{
     private static final String TAG = MainActivity.class.getSimpleName();
     final MainActivity self = this;
 
@@ -82,8 +77,9 @@ public class MainActivity extends AppCompatActivity
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECEIVE_BOOT_COMPLETED,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
-};
+    };
 
     FloatingActionButton fab1;
     FloatingActionButton fab2;
@@ -92,18 +88,17 @@ public class MainActivity extends AppCompatActivity
 
     // A reference to the service used to get location updates.
     private StepTrackingService mService = null;
+    //private StepTrackingService2 mService2 = null;
     // Tracks the bound state of the service.
     private boolean mBound = false;
     // Monitors the state of the connection to the service.
     private final ServiceConnection mServiceConnection = new ServiceConnection() {
-
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             StepTrackingService.LocalBinder binder = (StepTrackingService.LocalBinder) service;
             mService = binder.getService();
             mBound = true;
         }
-
         @Override
         public void onServiceDisconnected(ComponentName name) {
             mService = null;
@@ -125,6 +120,11 @@ public class MainActivity extends AppCompatActivity
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        //set-up bootreceiver
+        final ComponentName onBootReceiver = new ComponentName(getApplication().getPackageName(), ServiceRestartReceiver.class.getName());
+        if(getPackageManager().getComponentEnabledSetting(onBootReceiver) != PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
+            getPackageManager().setComponentEnabledSetting(onBootReceiver,PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);
+
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
                 this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
@@ -139,26 +139,22 @@ public class MainActivity extends AppCompatActivity
             requestPermissions();
         }
 
-        WelcomeFragment fragment = new WelcomeFragment();
-        getSupportFragmentManager().beginTransaction()
-                .add(R.id.fragment_container, fragment, WelcomeFragment.TAG).commit();
+//        WelcomeFragment fragment = new WelcomeFragment();
+//        getSupportFragmentManager().beginTransaction()
+//                .add(R.id.fragment_container, fragment, WelcomeFragment.TAG).commit();
 
-        if (fragment != null) {
-            //TextView tvSteps = fragment.getView().findViewById(R.id.tvSteps);
-//            LatLng coordinate = AppUtils.getPrefPlaceLatLng(self);
-//            if (coordinate != null) {
-//                //tvSteps.setText("Home is" + coordinate.toString());
-//                fragment.setHomeCoordinate(coordinate);
-//            } else {
-//                //tvSteps.setText("Home address unknown");
-//            }
-        }
+        //TODO: Check if address is set, if not popup place picking dialog
+        //StatusFragment fragment = StatusFragment.newInstance(45.482134, 9.224853);
+//        getSupportFragmentManager().beginTransaction()
+//                .add(R.id.fragment_container, fragment, StatusFragment.TAG).commit();
+
+
         //TODO: *** Start service for counting steps
         // Check if the service is running
         if (AppUtils.getServiceRunningStatus(self) <= 0) {
 
-            //TODO: Mark Service as Started
-            AppUtils.setServiceRun(this, false);
+//            //TODO: Mark Service as Started
+//            AppUtils.setServiceRun(this, false);
 
             // Start Step Counting service
             Intent serviceIntent = new Intent(this, StepTrackingService.class);
@@ -168,7 +164,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    public void onBackPressed() {
+    public void onBackPressed() { //auto-generated
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         if (drawer.isDrawerOpen(GravityCompat.START)) {
             drawer.closeDrawer(GravityCompat.START);
@@ -178,14 +174,14 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    public boolean onCreateOptionsMenu(Menu menu) { //auto-generated
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onOptionsItemSelected(MenuItem item) { //auto-generated
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
@@ -205,29 +201,30 @@ public class MainActivity extends AppCompatActivity
         // Handle navigation view item clicks here.
         int id = item.getItemId();
 
+        Fragment fragment = null;
+
         if (id == R.id.nav_camera) {
-            WelcomeFragment fragment = new WelcomeFragment();
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, fragment, WelcomeFragment.TAG)
-                    .commit();
-        } else if (id == R.id.nav_gallery) {
-            //Pick the location for home address
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
+            // update the main content by replacing fragments
+            LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
+            if (latLng == null){
+                Toast.makeText(self,"No home address recorded", Toast.LENGTH_LONG).show();
                 return false;
             }
-            try {
-                // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
-                // when a place is selected or with the user cancels.
-                PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
-                //Intent i = builder.build(this);
-                startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
-            } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
-                Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
-            } catch (Exception e) {
-                Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
-            }
+            fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            fragmentManager.beginTransaction()
+                    .replace(R.id.fragment_container, fragment)
+                    .commit();
+
+        } else if (id == R.id.nav_gallery) {
+            //Pick the location for home address
+            fragment = SettingFragment.newInstance("1", "2");
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            fragmentManager.beginTransaction()
+                    .replace(R.id.fragment_container, fragment)
+                    .commit();
+
         } else if (id == R.id.nav_slideshow) {
             //TODO: Export all data
             Log.w(TAG, "Going to export data");
@@ -236,16 +233,26 @@ public class MainActivity extends AppCompatActivity
 //            Log.w(TAG,"FINISHED??");
             ExportData();
         } else if (id == R.id.nav_manage) {
-            WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG)
-                    .commit();
+//            WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
+//            getSupportFragmentManager().beginTransaction()
+//                    .replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG)
+//                    .commit();
 
         } else if (id == R.id.nav_share) {
 
         } else if (id == R.id.nav_send) {
 
         }
+
+//        try{
+//            fragment = (Fragment) fragmentClass.newInstance();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//
+//        // Insert the fragment by replacing any existing fragment
+//        FragmentManager fragmentManager = getSupportFragmentManager();
+//        fragmentManager.beginTransaction().replace(R.id.fragment_container, fragment).commit();
 
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
@@ -258,30 +265,32 @@ public class MainActivity extends AppCompatActivity
         PreferenceManager.getDefaultSharedPreferences(this)
                 .registerOnSharedPreferenceChangeListener(this);
 
-        fab1 = (FloatingActionButton) findViewById(R.id.fab1);
-        fab1.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-//                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-//                        .setAction("Action", null).show();
-                if (!checkPermissions()) {
-                    requestPermissions();
-                } else {
-                    mService.requestLocationUpdates();
-                }
-            }
-        });
-        fab2 = (FloatingActionButton) findViewById(R.id.fab2);
-        fab2.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mService.removeLocationUpdates();
-            }
-        });
-
-        // Restore the state of the buttons when the activity (re)launches.
-        setButtonsState(AppUtils.requestingLocationUpdates(this));
-
+//
+//        fab1 = (FloatingActionButton) findViewById(R.id.fab1);
+//        fab1.setOnClickListener(new View.OnClickListener() {
+//            @Override
+//            public void onClick(View view) {
+////                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+////                        .setAction("Action", null).show();
+//                if (!checkPermissions()) {
+//                    requestPermissions();
+//                } else {
+//                   // mService.requestLocationUpdates();
+//                }
+//            }
+//        });
+//        fab2 = (FloatingActionButton) findViewById(R.id.fab2);
+//        fab2.setOnClickListener(new View.OnClickListener() {
+//            @Override
+//            public void onClick(View view) {
+//                // mService.removeLocationUpdates();
+//            }
+//        });
+//
+//        // Restore the state of the buttons when the activity (re)launches.
+////        setButtonsState(AppUtils.requestingLocationUpdates(this));
+//        fab1.hide();//.setEnabled(false);
+//        fab2.show();//.setEnabled(true);
 
         // Bind to the service. If the service is in foreground mode, this signals to the service
         // that since this activity is in the foreground, the service can exit foreground mode.
@@ -296,6 +305,7 @@ public class MainActivity extends AppCompatActivity
         super.onResume();
 //        LocalBroadcastManager.getInstance(this).registerReceiver(myReceiver,
 //                new IntentFilter(LocationUpdatesService.ACTION_BROADCAST));
+        AppUtils.setKeyActivityActive(this,true);
     }
 
     @Override
@@ -320,8 +330,7 @@ public class MainActivity extends AppCompatActivity
         PreferenceManager.getDefaultSharedPreferences(this)
                 .unregisterOnSharedPreferenceChangeListener(this);
 
-
-
+        AppUtils.setKeyActivityActive( this,false);
         super.onStop();
     }
 
@@ -339,26 +348,27 @@ public class MainActivity extends AppCompatActivity
                 Log.i(TAG, "No place selected");
                 return;
             }
-
-//            // Extract the place information from the API
-            //Temperately use sharedpreference
             AppUtils.setPrefPlace(self,place);
-            WelcomeFragment fragment = (WelcomeFragment)getSupportFragmentManager().
-                    findFragmentByTag(WelcomeFragment.TAG);
-                    //findFragmentById(R.id.fragment_container);
-            if(fragment != null){
-                fragment.setHomeCoordinate(place.getLatLng());
-//                TextView textView = fragment.getView().findViewById(R.id.tvSteps);
-//                textView.setText("Home is: " + place.getLatLng().toString());
-            }
-            Toast.makeText(self,getString(R.string.home_address_added), Toast.LENGTH_SHORT).show();
-//            // Insert a new place into DB TODO
-//            ContentValues contentValues = new ContentValues();
-//            contentValues.put(PlaceContract.PlaceEntry.COLUMN_PLACE_ID, placeID);
-//            getContentResolver().insert(PlaceContract.PlaceEntry.CONTENT_URI, contentValues);
-//
-//            // Get live data information
-//            refreshPlacesData();
+
+////            // Extract the place information from the API
+//            //Temperately use sharedpreference
+//            AppUtils.setPrefPlace(self,place);
+//            WelcomeFragment fragment = (WelcomeFragment)getSupportFragmentManager().
+//                    findFragmentByTag(WelcomeFragment.TAG);
+//                    //findFragmentById(R.id.fragment_container);
+//            if(fragment != null){
+//                fragment.setHomeCoordinate(place.getLatLng());
+////                TextView textView = fragment.getView().findViewById(R.id.tvSteps);
+////                textView.setText("Home is: " + place.getLatLng().toString());
+//            }
+//            Toast.makeText(self,getString(R.string.home_address_added), Toast.LENGTH_SHORT).show();
+////            // Insert a new place into DB TODO
+////            ContentValues contentValues = new ContentValues();
+////            contentValues.put(PlaceContract.PlaceEntry.COLUMN_PLACE_ID, placeID);
+////            getContentResolver().insert(PlaceContract.PlaceEntry.CONTENT_URI, contentValues);
+////
+////            // Get live data information
+////            refreshPlacesData();
         }
     }
 
@@ -366,8 +376,8 @@ public class MainActivity extends AppCompatActivity
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
         // Update the buttons state depending on whether location updates are being requested.
         if (s.equals(AppUtils.KEY_REQUESTING_LOCATION_UPDATES)) {
-            setButtonsState(sharedPreferences.getBoolean(AppUtils.KEY_REQUESTING_LOCATION_UPDATES,
-                    false));
+//            setButtonsState(sharedPreferences.getBoolean(AppUtils.KEY_REQUESTING_LOCATION_UPDATES,
+//                    false));
         }
         //if (s.equals(AppUtils.KEY_PLACE_LAT))
     }
@@ -553,4 +563,47 @@ public class MainActivity extends AppCompatActivity
         t.start();
     }
 
+    @Override
+    public void StatusInteraction(int interactionType) {
+        switch (interactionType){
+            case StatusFragment.ON_START_CLICKED:
+                if (mService != null){
+                    if (! AppUtils.startingWalkingSession(self)){
+                        mService.requestLocationUpdates();
+                    }else {
+                        mService.removeLocationUpdates();
+                    }
+                }
+                Toast.makeText(self, "Clicked started", Toast.LENGTH_LONG).show();
+                break;
+        }
+    }
+
+    @Override
+    public void onSettingFragmentInteraction(int interactionType) {
+        switch (interactionType){
+            case SettingFragment.ON_PLACE_CLICKED:
+                    //Pick the location for home address
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                try {
+                    // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
+                    // when a place is selected or with the user cancels.
+                    PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
+                    //Intent i = builder.build(this);
+                    startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
+                } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
+                    Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
+                } catch (Exception e) {
+                    Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
+                }
+                break;
+            case SettingFragment.ON_EXPORT_CLICKED:
+                ExportData();
+                break;
+        }
+    }
 }

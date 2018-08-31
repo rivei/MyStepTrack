@@ -30,4 +30,8 @@
     <string name="geofences_added">Geofences added</string>
     <string name="geofences_removed">Geofences removed</string>
 
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_setting_fragment">Some setting</string>
+
+
 </resources>

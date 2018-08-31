@@ -6,6 +6,15 @@ public final class AppConstants {
     public static final String PACKAGE_NAME = "it.polimi.steptrack";
 
     /**
+     * For StepTrackingService
+     */
+    public final static String STEPTRACKINGSERVICE = PACKAGE_NAME + ".services.StepTrackingService";
+    public final static int SERVICE_NOT_RUNNING = 0;
+    public final static int SERVICE_RUNNING = 1;
+    public final static int SERVICE_RUNNING_FOREGROUND = 2;
+
+
+    /**
      * For Locations
      */
     // The desired interval for location updates. Inexact. Updates may be more or less frequent.
@@ -21,11 +30,11 @@ public final class AppConstants {
 
 
     /**
-     * For StepTrackingService
+     * For Geofencing
      */
-    public final static String STEPTRACKINGSERVICE = PACKAGE_NAME + ".services.StepTrackingService";
-    public final static int SERVICE_RUNNING = 1;
-    public final static int SERVICE_RUNNING_FOREGROUND = 2;
+    public static final String GEOFENCES_ADDED_KEY = PACKAGE_NAME + ".GEOFENCES_ADDED_KEY";
+    public static final float GEOFENCE_RADIUS_IN_METERS = 25; //25 meter
+
 
     /**
      * For Activity recognition
@@ -52,22 +61,6 @@ public final class AppConstants {
 //     */
 //    public static final long DETECTION_INTERVAL_IN_MILLISECONDS = 5 * 1000;;
 
-    /**
-     * List of DetectedActivity types that we monitor in this sample.
-     */
-    protected static final int[] MONITORED_ACTIVITIES = {
-            DetectedActivity.STILL,
-            DetectedActivity.ON_FOOT,
-            DetectedActivity.WALKING,
-            DetectedActivity.RUNNING,
-            DetectedActivity.ON_BICYCLE,
-            DetectedActivity.IN_VEHICLE,
-            DetectedActivity.TILTING,
-            DetectedActivity.UNKNOWN
-    };
-
-    public static final String GEOFENCES_ADDED_KEY = PACKAGE_NAME + ".GEOFENCES_ADDED_KEY";
-    public static final float GEOFENCE_RADIUS_IN_METERS = 25; // 1 mile, 1.6 km
 
 
 }
