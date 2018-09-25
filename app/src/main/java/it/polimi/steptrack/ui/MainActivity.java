@@ -530,7 +530,7 @@ public class MainActivity extends AppCompatActivity
                     rawDataList.add(location.toString());
                 }
                 String filename = "Locations.csv";
-                final String header = "session_id, GTimestamp,latitude, longitude \n";
+                final String header = "session_id, GTimestamp,latitude, longitude, provider, accuracy \n";
                 AppUtils.writeFile(filename, header, rawDataList);
             }
         };

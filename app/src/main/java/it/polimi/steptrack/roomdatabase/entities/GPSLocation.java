@@ -27,12 +27,20 @@ public class GPSLocation {
     @ColumnInfo
     public double longitude;
 
+    @ColumnInfo
+    public String provider;
+
+    @ColumnInfo
+    public float accuracy;
+
     @Override
     public String toString(){
         return session_id + ", " +
                 GTimestamp + ", " +
                 latitude + ", " +
-                longitude;
+                longitude + "," +
+                provider + "," +
+                accuracy;
     }
 
 }

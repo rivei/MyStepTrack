@@ -449,6 +449,7 @@ public class StepTrackingService extends Service
         try {
             mFusedLocationClient.requestLocationUpdates(mLocationRequest,
                     mLocationCallback, Looper.myLooper());
+            //TODO: locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, new MyLocationListener());
             //Add sensor listener:
         } catch (SecurityException unlikely) {
             mSessionStarted = false;
@@ -599,8 +600,8 @@ public class StepTrackingService extends Service
             mGPSLocation.GTimestamp = location.getTime();
             mGPSLocation.latitude = location.getLatitude();
             mGPSLocation.longitude = location.getLongitude();
-            //location.getProvider();
-            //location.getAccuracy();
+            mGPSLocation.provider = location.getProvider();
+            mGPSLocation.accuracy = location.getAccuracy();
             mGPSLocation.session_id = mWalkingSessionId;
             new Thread(new Runnable() {
                 @Override
