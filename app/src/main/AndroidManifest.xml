@@ -50,15 +50,15 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="@string/google_maps_key" />
         <!-- For place picker -->
-<!--        <meta-data
+        <meta-data
             android:name="com.google.android.awareness.API_KEY"
-            android:value="AIzaSyAZKvV26Fare-9Lkjv-zSJlwBWzq0w6pI8"/>-->
+            android:value="@string/google_maps_key"/>
         <!-- For awareness API -->
 
 
         <service android:name=".services.StepTrackingService"
             android:enabled="true"/>
-        <service android:name=".services.StepTrackingService2" />
+        <!--<service android:name=".services.StepTrackingService2" />-->
 
 
         <receiver android:name=".receivers.ServiceRestartReceiver">

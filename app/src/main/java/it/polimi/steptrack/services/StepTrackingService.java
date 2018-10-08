@@ -64,6 +64,7 @@ import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
+import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
@@ -161,6 +162,8 @@ public class StepTrackingService extends Service
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
     private Sensor accSensor = null;
+    private Sensor gyroSensor = null;
+    private Sensor magSensor = null;
     private long sensorTimeRef1 = -1L;
     private long sensorTimeRef2 = -1L;
     private long sysTimeRef1 = -1L;
@@ -172,6 +175,7 @@ public class StepTrackingService extends Service
     private AppDatabase mDB;
     //private DataRepository mAccRepo;
     private AccelerometerSample mAccSample;
+    private GyroscopeSample mGyroSample;
     private GPSLocation mGPSLocation;
     //private List<AccelerometerSample> mAccSamples;
     private WalkingEvent mWalkingEvent;
@@ -210,6 +214,9 @@ public class StepTrackingService extends Service
         if (mSensorManager != null) {
             countSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
             accSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            gyroSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            //magSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR); //TODO: need to checked!!
+
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
@@ -482,6 +489,15 @@ public class StepTrackingService extends Service
             Toast.makeText(this, "Accelerometer not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
         }
+
+        if (gyroSensor != null) {
+            //TODO: Gyroscope sensor registration listener
+            Toast.makeText(this, "Started Gyroscope", Toast.LENGTH_LONG).show();
+            mSensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_FASTEST);
+        } else {
+            Toast.makeText(this, "Gyroscope not Compatible!", Toast.LENGTH_LONG).show();
+            this.stopSelf();
+        }
     }
 
     /**
@@ -675,6 +691,27 @@ public class StepTrackingService extends Service
                             public void run() {
                                 mDB.accSampleDao().insert(mAccSample);
                                 Log.w(TAG, "write ACC: " + mAccSample.AsTimestamp);
+                            }
+                        }).start();
+                    }
+                }
+            }
+        }
+        if (sensorEvent.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
+            setupSensorOffset(sensorEvent.timestamp);
+            if (startoffset > 0 && rateoffset > 0){
+                if(mWalkingSessionId != -1){
+                    mGyroSample = new GyroscopeSample();
+                    mGyroSample.SessionID = mWalkingSessionId;
+                    mGyroSample.GyTimestamp = (sensorEvent.timestamp - sensorTimeRef1)/rateoffset + sysTimeRef1;
+                    mGyroSample.mGyroX = sensorEvent.values[0];
+                    mGyroSample.mGyroY = sensorEvent.values[1];
+                    mGyroSample.mGyroZ = sensorEvent.values[2];
+                    if (mSessionStarted){
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mDB.gyroSampleDao().insert(mGyroSample);
                             }
                         }).start();
                     }

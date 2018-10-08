@@ -28,6 +28,7 @@ public class DataExportIntentService extends IntentService {
     private AppDatabase mDB;
     //private DataRepository mAccRepo;
     private List<String> mAccSamples;
+    private List<String> mGyroSamples;
     private List<String> mGPSLocations;
     private List<String> mWalkingEvents;
     private List<String> mWalkingSessions;

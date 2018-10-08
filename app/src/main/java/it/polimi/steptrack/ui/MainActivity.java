@@ -58,6 +58,7 @@ import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
+import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.services.DataExportIntentService;
@@ -557,6 +558,19 @@ public class MainActivity extends AppCompatActivity
                 }
                 String filename = "walkingsession.csv";
                 final String header = "user_Id, session_id, StartTime, EndTime, StepCount, StepDetect, Distance, AverageSpeed, Duration, Tag \n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (GyroscopeSample gyroSample : mDB.gyroSampleDao().getAllSamplesSynchronous()) {
+                    rawDataList.add(gyroSample.toString());
+                }
+                String filename = "gyroSamples.csv";//"Insoles - " + sessionDate;
+                final String header = "session_id, timestamp, gyro_x, gyro_y, gyro_z \n";
                 AppUtils.writeFile(filename, header, rawDataList);
             }
         };
