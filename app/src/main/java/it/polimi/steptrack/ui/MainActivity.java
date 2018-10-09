@@ -149,7 +149,6 @@ public class MainActivity extends AppCompatActivity
 //        getSupportFragmentManager().beginTransaction()
 //                .add(R.id.fragment_container, fragment, StatusFragment.TAG).commit();
 
-
         //TODO: *** Start service for counting steps
         // Check if the service is running
         if (AppUtils.getServiceRunningStatus(self) <= 0) {
@@ -208,7 +207,8 @@ public class MainActivity extends AppCompatActivity
             // update the main content by replacing fragments
             LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
             if (latLng == null){
-                Toast.makeText(self,"No home address recorded", Toast.LENGTH_LONG).show();
+                Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
+                PickHomeAddress();
                 return false;
             }
             fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
@@ -266,38 +266,52 @@ public class MainActivity extends AppCompatActivity
         PreferenceManager.getDefaultSharedPreferences(this)
                 .registerOnSharedPreferenceChangeListener(this);
 
-//
-//        fab1 = (FloatingActionButton) findViewById(R.id.fab1);
-//        fab1.setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View view) {
-////                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-////                        .setAction("Action", null).show();
-//                if (!checkPermissions()) {
-//                    requestPermissions();
-//                } else {
-//                   // mService.requestLocationUpdates();
-//                }
-//            }
-//        });
-//        fab2 = (FloatingActionButton) findViewById(R.id.fab2);
-//        fab2.setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View view) {
-//                // mService.removeLocationUpdates();
-//            }
-//        });
-//
-//        // Restore the state of the buttons when the activity (re)launches.
-////        setButtonsState(AppUtils.requestingLocationUpdates(this));
-//        fab1.hide();//.setEnabled(false);
-//        fab2.show();//.setEnabled(true);
 
         // Bind to the service. If the service is in foreground mode, this signals to the service
         // that since this activity is in the foreground, the service can exit foreground mode.
         bindService(new Intent(this, StepTrackingService.class), mServiceConnection,
                 Context.BIND_AUTO_CREATE);//TODO NOTE: activates the onCreate of service and
         //TODO NOTE: the foreground mode only works when this is put in onStart
+
+        LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
+        if (latLng == null){
+            Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
+            PickHomeAddress();
+            //return false;
+//            StatusFragment fragment;
+//            fragment = StatusFragment.newInstance(-1.0, -1.0);
+//            FragmentManager fragmentManager = getSupportFragmentManager();
+//            fragmentManager.beginTransaction()
+//                    .add(R.id.fragment_container, fragment, StatusFragment.TAG)
+//                    .commit();
+        }
+        else {
+            StatusFragment fragment;
+            fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            fragmentManager.beginTransaction()
+                    .add(R.id.fragment_container, fragment, StatusFragment.TAG)
+                    .commit();
+        }
+    }
+
+    private void PickHomeAddress(){
+        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
+            // when a place is selected or with the user cancels.
+            PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
+            //Intent i = builder.build(this);
+            startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
+        } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
+            Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
+        } catch (Exception e) {
+            Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
+        }
     }
 
 
@@ -306,7 +320,7 @@ public class MainActivity extends AppCompatActivity
         super.onResume();
 //        LocalBroadcastManager.getInstance(this).registerReceiver(myReceiver,
 //                new IntentFilter(LocationUpdatesService.ACTION_BROADCAST));
-        AppUtils.setKeyActivityActive(this,true);
+
     }
 
     @Override
@@ -350,6 +364,13 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
             AppUtils.setPrefPlace(self,place);
+            LatLng latLng = place.getLatLng();
+            StatusFragment fragment;
+            fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+            FragmentManager fragmentManager = getSupportFragmentManager();
+            fragmentManager.beginTransaction()
+                    .add(R.id.fragment_container, fragment, StatusFragment.TAG)
+                    .commit();
 
 ////            // Extract the place information from the API
 //            //Temperately use sharedpreference
@@ -370,6 +391,9 @@ public class MainActivity extends AppCompatActivity
 ////
 ////            // Get live data information
 ////            refreshPlacesData();
+        }
+        else{
+            Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -588,7 +612,7 @@ public class MainActivity extends AppCompatActivity
                         mService.removeLocationUpdates();
                     }
                 }
-                Toast.makeText(self, "Clicked started", Toast.LENGTH_LONG).show();
+                //Toast.makeText(self, "Clicked started", Toast.LENGTH_LONG).show();
                 break;
         }
     }
@@ -598,22 +622,23 @@ public class MainActivity extends AppCompatActivity
         switch (interactionType){
             case SettingFragment.ON_PLACE_CLICKED:
                     //Pick the location for home address
-                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-                        != PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
-                    return;
-                }
-                try {
-                    // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
-                    // when a place is selected or with the user cancels.
-                    PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
-                    //Intent i = builder.build(this);
-                    startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
-                } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
-                    Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
-                } catch (Exception e) {
-                    Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
-                }
+                PickHomeAddress();
+//                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+//                        != PackageManager.PERMISSION_GRANTED) {
+//                    Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
+//                    return;
+//                }
+//                try {
+//                    // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
+//                    // when a place is selected or with the user cancels.
+//                    PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
+//                    //Intent i = builder.build(this);
+//                    startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
+//                } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
+//                    Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
+//                } catch (Exception e) {
+//                    Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
+//                }
                 break;
             case SettingFragment.ON_EXPORT_CLICKED:
                 ExportData();
