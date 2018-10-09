@@ -562,7 +562,7 @@ public class StepTrackingService extends Service
                     .setContentTitle(AppUtils.getLocationTitle(this))
                     .setOngoing(true)
                     .setPriority(Notification.PRIORITY_HIGH)
-                    .setSmallIcon(R.mipmap.ic_tracking)
+
                     //.setTicker(text)
                     .setWhen(System.currentTimeMillis())
                     .setAutoCancel(false)
@@ -577,6 +577,7 @@ public class StepTrackingService extends Service
             }
         }
         // Update Step Count
+        mBuilder.setSmallIcon(R.mipmap.ic_tracking); //It's a must
         mBuilder.setContentTitle(mStepsCount + " steps taken");
         if (mSessionStarted) {
             //mBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
@@ -685,14 +686,14 @@ public class StepTrackingService extends Service
 
                         }
                     };
-                    t.start();*/
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                mDB.accSampleDao().insert(mAccSample);
-                                Log.w(TAG, "write ACC: " + mAccSample.AsTimestamp);
-                            }
-                        }).start();
+//                    t.start();*/
+//                        new Thread(new Runnable() {
+//                            @Override
+//                            public void run() {
+//                                mDB.accSampleDao().insert(mAccSample);
+//                                //Log.w(TAG, "write ACC: " + mAccSample.AsTimestamp);
+//                            }
+//                        }).start();
                     }
                 }
             }
