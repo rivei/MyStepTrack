@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="it.polimi.steptrack">
+    <uses-feature android:name="android.hardware.sensor.gyroscope"/>
+
 
     <!--
          The ACCESS_COARSE/FINE_LOCATION permissions are not required to use

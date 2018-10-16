@@ -33,6 +33,18 @@ public class GPSLocation {
     @ColumnInfo
     public float accuracy;
 
+    @ColumnInfo
+    public float speed;
+
+//    @ColumnInfo (name = "speed_accuracy")
+//    public float speedAccuracy;
+
+    @ColumnInfo
+    public float bearing;
+
+    @ColumnInfo
+    public int isWalking;
+
     @Override
     public String toString(){
         return session_id + ", " +
@@ -40,7 +52,11 @@ public class GPSLocation {
                 latitude + ", " +
                 longitude + "," +
                 provider + "," +
-                accuracy;
+                accuracy + "," +
+                speed + "," +
+                bearing + "," +
+                isWalking;// + "," +
+//                speedAccuracy;
     }
 
 }

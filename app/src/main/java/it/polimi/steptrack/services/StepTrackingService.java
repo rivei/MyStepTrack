@@ -73,8 +73,7 @@ import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppUtils.PREFS_NAME;
 
 public class StepTrackingService extends Service
-        implements SensorEventListener,
-        OnCompleteListener<Void>{
+        implements SensorEventListener{
 
     private static final String PACKAGE_NAME = "it.polimi.steptrack";
 
@@ -131,14 +130,6 @@ public class StepTrackingService extends Service
      */
     private Location mLocation;
 
-//    // The fence key is how callback code determines which fence fired.
-//    private final String FENCE_KEY = "fence_key";
-//    // The intent action which will be fired when your fence is triggered.
-//    private final String FENCE_RECEIVER_ACTION =
-//            BuildConfig.APPLICATION_ID + "FENCE_RECEIVER_ACTION";
-//    // Declare variables for pending intent and fence receiver.
-//    private PendingIntent myPendingIntent;
-//    private MyFenceReceiver myFenceReceiver;
 
     /**
      * For activity detection
@@ -147,23 +138,18 @@ public class StepTrackingService extends Service
 //    protected ActivityDetectionReceiver mBroadcastReceiver;
     private PendingIntent mPendingIntent;
     private TransitionsReceiver mTransitionsReceiver;
+    private int mIsWalking = -1;
 
-    /**
-     * For Geofencing
-     */
-    private GeofencingClient mGeofencingClient;//Provides access to the Geofencing API.
-    // The list of geofences used in this sample.
-    private ArrayList<Geofence> mGeofenceList;
-    // Used when requesting to add or remove geofences.
-    private PendingIntent mGeofencePendingIntent;
-    private GeoFencingEvent mGeofencingEvent;
+
     private LatLng mHomeCoordinate = null;
 
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
+    private Sensor stepDetectSensor = null;
     private Sensor accSensor = null;
     private Sensor gyroSensor = null;
-    private Sensor magSensor = null;
+    private Sensor magnSensor = null;
+
     private long sensorTimeRef1 = -1L;
     private long sensorTimeRef2 = -1L;
     private long sysTimeRef1 = -1L;
@@ -208,24 +194,24 @@ public class StepTrackingService extends Service
         mServiceHandler = new Handler(handlerThread.getLooper());
         //***HandlerThread needs to call myHandlerThread.quit() to free the resources and stop the execution of the thread.
 
-        //************************* For step count ~*********************//
-        // Setup Step Counter
         mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (mSensorManager != null) {
             countSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+            stepDetectSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
             accSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             gyroSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-            //magSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR); //TODO: need to checked!!
-
+            magnSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
             mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
         } else {
-            Toast.makeText(this, "Device not Compatible!", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Step count sensor missing. Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
         }
 
+        //************************* For step count *********************//
+        // Setup Step Counter
         mStepsCount = AppUtils.getLastStepCount(this) - AppUtils.getStepCountOffset(this);
 
         // Get Notification Manager
@@ -243,10 +229,6 @@ public class StepTrackingService extends Service
             mNotificationManager.createNotificationChannel(mChannel);
         }
 
-//        Intent intent = new Intent(FENCE_RECEIVER_ACTION);
-//        myPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
-//        myFenceReceiver = new MyFenceReceiver();
-//        registerReceiver(myFenceReceiver, new IntentFilter(FENCE_RECEIVER_ACTION));
 
         //******************** Activity Detection *************************************//
 //        mActivityRecognitionClient = new ActivityRecognitionClient(this);
@@ -256,35 +238,6 @@ public class StepTrackingService extends Service
         //PendingIntent.getService(this,)
         mTransitionsReceiver = new TransitionsReceiver();
         registerReceiver(mTransitionsReceiver, new IntentFilter(AppConstants.TRANSITIONS_RECEIVER_ACTION));
-
-        //***************** Geofencing *****************//
-        // Empty list for storing geofences.
-        mGeofenceList = new ArrayList<>();
-        // Initially set the PendingIntent used in addGeofences() and removeGeofences() to null.
-        mGeofencePendingIntent = null;
-        mHomeCoordinate = AppUtils.getPrefPlaceLatLng(this);
-        if(mHomeCoordinate != null) {
-            mGeofenceList.add(new Geofence.Builder()
-                    // Set the request ID of the geofence. This is a string to identify this
-                    // geofence.
-                    .setRequestId("Home")
-                    // Set the circular region of this geofence.
-                    .setCircularRegion( //TODO: change home adress!!
-                            mHomeCoordinate.latitude, mHomeCoordinate.latitude,
-                            AppConstants.GEOFENCE_RADIUS_IN_METERS
-                    )
-                    // Set the expiration duration of the geofence. This geofence gets automatically
-                    // removed after this period of time.
-                    .setExpirationDuration(Geofence.NEVER_EXPIRE)
-                    // Set the transition types of interest. Alerts are only generated for these
-                    // transition. We track entry and exit transitions in this sample.
-                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER |
-                            Geofence.GEOFENCE_TRANSITION_EXIT)
-                    // Create the geofence.
-                    .build());
-            Log.w(TAG, "Geofence added");//errorMessage);
-        }
-        mGeofencingClient = LocationServices.getGeofencingClient(this);
 
 
         //TODO: db
@@ -311,7 +264,7 @@ public class StepTrackingService extends Service
 
         //************************* For step count ~*********************//
 /*
-        // Setup First Notification TODO-Q?? the first is set when calling start forgound?
+        // Setup First Notification TODO-Q?? the first is set when calling start foregound?
         mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
         //updateNotification(true);
 
@@ -329,12 +282,7 @@ public class StepTrackingService extends Service
         sharedPreferences.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener);
 */
         //TODO: start Monitoring activities and locations
-        //setupFences();
         setupActivityTransitions();
-        if (mHomeCoordinate != null) {
-            //TODO: make better this logic
-            addGeofences();
-        }
 
 //        //TODO: make the notification works when the service resume from phone reboot
         if (!AppUtils.getKeyActivityActive(this)){
@@ -357,7 +305,7 @@ public class StepTrackingService extends Service
         // and binds with this service. The service should cease to be a foreground service
         // when that happens.
         Log.i(TAG, "in onBind()");
-        stopForeground(true);
+        //stopForeground(true); //Let notification always on;
         mChangingConfiguration = false;
         return mBinder;
     }
@@ -368,7 +316,7 @@ public class StepTrackingService extends Service
         // and binds once again with this service. The service should cease to be a foreground
         // service when that happens.
         Log.i(TAG, "in onRebind()");
-        stopForeground(true);
+        //stopForeground(true);
         mChangingConfiguration = false;
         super.onRebind(intent);
     }
@@ -382,35 +330,15 @@ public class StepTrackingService extends Service
         // Called when the last client (MainActivity in case of this sample) unbinds from this
         // service. If this method is called due to a configuration change in MainActivity, we
         // do nothing. Otherwise, we make this service a foreground service.
-        if (!mChangingConfiguration) {//TODO: && AppUtils.requestingLocationUpdates(this)) {
-            Log.i(TAG, "Starting foreground service");
-            startForeground(NOTIFICATION_ID, getNotification(true)); //Anyway works for Oreo
-        }
+//        if (!mChangingConfiguration) {//TODO: && AppUtils.requestingLocationUpdates(this)) {
+//            Log.i(TAG, "Starting foreground service");
+//            startForeground(NOTIFICATION_ID, getNotification(true)); //Anyway works for Oreo
+//        }
         return true; // Ensures onRebind() is called when a client re-binds.
     }
 
     @Override
     public void onDestroy() {
-//        if (myFenceReceiver != null) {
-//            unregisterReceiver(myFenceReceiver);
-//            myFenceReceiver = null;
-//        }
-//        // Unregister the fence:
-//        Awareness.getFenceClient(this).updateFences(new FenceUpdateRequest.Builder()
-//                .removeFence(FENCE_KEY)
-//                .build())
-//                .addOnSuccessListener(new OnSuccessListener<Void>() {
-//                    @Override
-//                    public void onSuccess(Void aVoid) {
-//                        Log.i(TAG, "Fence was successfully unregistered.");
-//                    }
-//                })
-//                .addOnFailureListener(new OnFailureListener() {
-//                    @Override
-//                    public void onFailure(@NonNull Exception e) {
-//                        Log.e(TAG, "Fence could not be unregistered: " + e);
-//                    }
-//                });
 
 
         // Unregister the transitions: (TODO: in Activity.onPause)
@@ -431,10 +359,6 @@ public class StepTrackingService extends Service
         if (mTransitionsReceiver != null) {
             unregisterReceiver(mTransitionsReceiver);
             mTransitionsReceiver = null;
-        }
-
-        if(mHomeCoordinate != null) {
-            removeGeofences();
         }
 
         mServiceHandler.removeCallbacksAndMessages(null);
@@ -597,6 +521,7 @@ public class StepTrackingService extends Service
                         public void onComplete(@NonNull Task<Location> task) {
                             if (task.isSuccessful() && task.getResult() != null) {
                                 mLocation = task.getResult();
+
                                 //Log.w(TAG, "The inital location: " + mLocation);
                             } else {
                                 Log.w(TAG, "Failed to get location.");
@@ -619,6 +544,14 @@ public class StepTrackingService extends Service
             mGPSLocation.longitude = location.getLongitude();
             mGPSLocation.provider = location.getProvider();
             mGPSLocation.accuracy = location.getAccuracy();
+            if (location.hasSpeed()){
+                mGPSLocation.speed = location.getSpeed();
+                //mGPSLocation.speedAccuracy = location.getSpeedAccuracyMetersPerSecond() // > Android v26
+            }
+            if(location.hasBearing()){
+                mGPSLocation.bearing = location.getBearing();
+            }
+            mGPSLocation.isWalking = mIsWalking;
             mGPSLocation.session_id = mWalkingSessionId;
             new Thread(new Runnable() {
                 @Override
@@ -668,25 +601,25 @@ public class StepTrackingService extends Service
             setupSensorOffset(sensorEvent.timestamp);
             if(startoffset > 0 && rateoffset > 0){
                 if (mWalkingSessionId != -1) {
-                    mAccSample = new AccelerometerSample();
-                    mAccSample.SessionID = mWalkingSessionId;
-                    mAccSample.AsTimestamp = (sensorEvent.timestamp - sensorTimeRef1) / rateoffset + sysTimeRef1;//+
-    //                        ((sensorEvent.timestamp - sensorTimeReference)/1000000L);
-    //                mAccSample.AsTimestamp = sensorEvent.timestamp;
-                    mAccSample.mAccX = sensorEvent.values[0];
-                    mAccSample.mAccY = sensorEvent.values[1];
-                    mAccSample.mAccZ = sensorEvent.values[2];
-                    // record acceleration
-                    //mDB.accSampleDao().insert(mAccSample);
-                    if (mSessionStarted) {
-                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-    /*                Thread t = new Thread() {
-                        public void run() {
-                            mDB.accSampleDao().insert(mAccSample);
-
-                        }
-                    };
-//                    t.start();*/
+//                    mAccSample = new AccelerometerSample();
+//                    mAccSample.SessionID = mWalkingSessionId;
+//                    mAccSample.AsTimestamp = (sensorEvent.timestamp - sensorTimeRef1) / rateoffset + sysTimeRef1;//+
+//    //                        ((sensorEvent.timestamp - sensorTimeReference)/1000000L);
+//    //                mAccSample.AsTimestamp = sensorEvent.timestamp;
+//                    mAccSample.mAccX = sensorEvent.values[0];
+//                    mAccSample.mAccY = sensorEvent.values[1];
+//                    mAccSample.mAccZ = sensorEvent.values[2];
+//                    // record acceleration
+//                    //mDB.accSampleDao().insert(mAccSample);
+//                    if (mSessionStarted) {
+//                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
+//                    Thread t = new Thread() {
+//                        public void run() {
+//                            mDB.accSampleDao().insert(mAccSample);
+//
+//                        }
+//                    };
+//                    t.start();
 //                        new Thread(new Runnable() {
 //                            @Override
 //                            public void run() {
@@ -694,29 +627,29 @@ public class StepTrackingService extends Service
 //                                //Log.w(TAG, "write ACC: " + mAccSample.AsTimestamp);
 //                            }
 //                        }).start();
-                    }
+//                    }
                 }
             }
         }
         if (sensorEvent.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
             setupSensorOffset(sensorEvent.timestamp);
             if (startoffset > 0 && rateoffset > 0){
-                if(mWalkingSessionId != -1){
-                    mGyroSample = new GyroscopeSample();
-                    mGyroSample.SessionID = mWalkingSessionId;
-                    mGyroSample.GyTimestamp = (sensorEvent.timestamp - sensorTimeRef1)/rateoffset + sysTimeRef1;
-                    mGyroSample.mGyroX = sensorEvent.values[0];
-                    mGyroSample.mGyroY = sensorEvent.values[1];
-                    mGyroSample.mGyroZ = sensorEvent.values[2];
-                    if (mSessionStarted){
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                mDB.gyroSampleDao().insert(mGyroSample);
-                            }
-                        }).start();
-                    }
-                }
+//                if(mWalkingSessionId != -1){
+//                    mGyroSample = new GyroscopeSample();
+//                    mGyroSample.SessionID = mWalkingSessionId;
+//                    mGyroSample.GyTimestamp = (sensorEvent.timestamp - sensorTimeRef1)/rateoffset + sysTimeRef1;
+//                    mGyroSample.mGyroX = sensorEvent.values[0];
+//                    mGyroSample.mGyroY = sensorEvent.values[1];
+//                    mGyroSample.mGyroZ = sensorEvent.values[2];
+//                    if (mSessionStarted){
+//                        new Thread(new Runnable() {
+//                            @Override
+//                            public void run() {
+//                                mDB.gyroSampleDao().insert(mGyroSample);
+//                            }
+//                        }).start();
+//                    }
+//                }
             }
         }
     }
@@ -743,107 +676,6 @@ public class StepTrackingService extends Service
     }
 
 
-//    /**
-//     * Sets up {@link AwarenessFence}'s for the sample app, and registers callbacks for them
-//     * with a custom {@link BroadcastReceiver}
-//     */
-//    private void setupFences() {
-//        // DetectedActivityFence will fire when it detects the user performing the specified
-//        // activity.  In this case it's walking.
-//        AwarenessFence walkingFence = DetectedActivityFence.during(DetectedActivityFence.WALKING);
-//        AwarenessFence headphoneFence = HeadphoneFence.during(HeadphoneState.PLUGGED_IN);
-//
-//        //Location for Home TODO!!!
-//        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-//            // TODO: Consider calling
-//            //    ActivityCompat#requestPermissions
-//            // here to request the missing permissions, and then overriding
-//            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-//            //                                          int[] grantResults)
-//            // to handle the case where the user grants the permission. See the documentation
-//            // for ActivityCompat#requestPermissions for more details.
-//            return;
-//        }
-//        AwarenessFence geoFence = LocationFence.exiting(45.472518, 9.245972, 25);
-//        // We can even nest compound fences.  Using both "and" and "or" compound fences, this
-//        // compound fence will determine when the user has headphones in and is engaging in at least
-//        // one form of exercise.
-//        // The below breaks down to "(headphones plugged in) AND (walking OR running OR bicycling)"
-//        AwarenessFence outHomeFence = AwarenessFence.and(geoFence, AwarenessFence.or(
-//                walkingFence, DetectedActivityFence.during(DetectedActivityFence.ON_FOOT)));
-//
-//        // Now that we have an interesting, complex condition, register the fence to receive
-//        // callbacks.
-//
-//        // Register the fence to receive callbacks.
-//        Awareness.getFenceClient(this).updateFences(new FenceUpdateRequest.Builder()
-//                .addFence(FENCE_KEY, outHomeFence, myPendingIntent)
-//                .build())
-//                .addOnSuccessListener(new OnSuccessListener<Void>() {
-//                    @Override
-//                    public void onSuccess(Void aVoid) {
-//                        Log.i(TAG, "Fence was successfully registered.");
-//                    }
-//                })
-//                .addOnFailureListener(new OnFailureListener() {
-//                    @Override
-//                    public void onFailure(@NonNull Exception e) {
-//                        Log.e(TAG, "Fence could not be registered: " + e);
-//                    }
-//                });
-//    }
-
-
-//    // Handle the callback on the Intent.
-//    public class MyFenceReceiver extends BroadcastReceiver {
-//        @Override
-//        public void onReceive(Context context, Intent intent) {
-//            if (!TextUtils.equals(FENCE_RECEIVER_ACTION, intent.getAction())) {
-////                mLogFragment.getLogView()
-////                        .println("Received an unsupported action in FenceReceiver: action="
-////                                + intent.getAction());
-//                Toast.makeText(context, "Received an unsupported action in FenceReceiver: action="
-//                        + intent.getAction(), Toast.LENGTH_LONG).show();
-//                return;
-//            }
-//
-//            FenceState fenceState = FenceState.extract(intent);
-//            if (TextUtils.equals(fenceState.getFenceKey(), FENCE_KEY)) {
-//                switch (fenceState.getCurrentState()) {
-//                    case FenceState.TRUE:
-//                        Log.i(TAG, "Walking out of home.");
-//                        updateNotification("Walking out of home.");
-//                        //mNotifContentText = "Walking out of home.";
-//                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-//                        break;
-//                    case FenceState.FALSE:
-//                        Log.i(TAG, "Walking back home.");
-//                        updateNotification("Walking back home");
-//                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-//                        break;
-//                    case FenceState.UNKNOWN:
-//                        Log.i(TAG, "unknown state.");
-//                        updateNotification("unknow state");
-//                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-//                        break;
-//                }
-//            }
-//        }
-//    }
-
-
-    //***************** Activity detection ***************************//
-//    private static String toActivityString(int activity) {
-//        switch (activity) {
-//            case DetectedActivity.STILL:
-//                return "STILL";
-//            case DetectedActivity.WALKING:
-//                return "WALKING";
-//            default:
-//                return "UNKNOWN";
-//        }
-//    }
-//
     private static String toTransitionType(int transitionType) {
         switch (transitionType) {
             case ActivityTransition.ACTIVITY_TRANSITION_ENTER:
@@ -922,6 +754,7 @@ public class StepTrackingService extends Service
                         mWalkingEvent.WeTimestamp = System.currentTimeMillis();
                         mWalkingEvent.mTransition = event.getTransitionType();
                         mWalkingEvent.mElapsedTime = event.getElapsedRealTimeNanos();
+                        mIsWalking = mWalkingEvent.mTransition;
                         Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
                                 Toast.LENGTH_LONG).show();
                         //TODO: write db -> crashed it says it's in main thread.??
@@ -951,241 +784,6 @@ public class StepTrackingService extends Service
         @Override
         protected Void doInBackground(WalkingEvent... walkingEvents) {
             mAsyncTaskDao.insert(walkingEvents[0]);
-            return null;
-        }
-    }
-
-    //********************* Geofence ****************************//
-
-    @Override
-    public void onComplete(@NonNull Task<Void> task) {
-        //mPendingGeofenceTask = PendingGeofenceTask.NONE;
-        if (task.isSuccessful()) {
-            updateGeofencesAdded(!getGeofencesAdded());
-//            setButtonsEnabledState();
-            int messageId = getGeofencesAdded() ? R.string.geofences_added :
-                    R.string.geofences_removed;
-            Toast.makeText(this, getString(messageId), Toast.LENGTH_SHORT).show();
-        } else {
-            // Get the status code for the error and log it using a user-friendly message.
-            //String errorMessage = task.getException().getMessage();//GeofenceErrorMessages.getErrorString(this, task.getException());
-            Log.w(TAG, "Geofence set up error");//errorMessage);
-        }
-    }
-
-    /**
-     * Gets a PendingIntent to send with the request to add or remove Geofences. Location Services
-     * issues the Intent inside this PendingIntent whenever a geofence transition occurs for the
-     * current list of geofences.
-     *
-     * @return A PendingIntent for the IntentService that handles geofence transitions.
-     */
-    private PendingIntent getGeofencePendingIntent() {
-        // Reuse the PendingIntent if we already have it.
-        if (mGeofencePendingIntent != null) {
-            return mGeofencePendingIntent;
-        }
-        Intent intent = new Intent(this, GeofenceBroadcastReceiver.class);
-        // We use FLAG_UPDATE_CURRENT so that we get the same pending intent back when calling
-        // addGeofences() and removeGeofences().
-        mGeofencePendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-        return mGeofencePendingIntent;
-    }
-
-    /**
-     * Builds and returns a GeofencingRequest. Specifies the list of geofences to be monitored.
-     * Also specifies how the geofence notifications are initially triggered.
-     */
-    private GeofencingRequest getGeofencingRequest() {
-        GeofencingRequest.Builder builder = new GeofencingRequest.Builder();
-
-        // The INITIAL_TRIGGER_ENTER flag indicates that geofencing service should trigger a
-        // GEOFENCE_TRANSITION_ENTER notification when the geofence is added and if the device
-        // is already inside that geofence.
-        builder.setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER);
-
-        // Add the geofences to be monitored by geofencing service.
-        builder.addGeofences(mGeofenceList);
-        Log.w(TAG, "Geofence request added");
-
-        // Return a GeofencingRequest.
-        return builder.build();
-    }
-
-    /**
-     * Returns true if geofences were added, otherwise false.
-     */
-    private boolean getGeofencesAdded() {
-        return PreferenceManager.getDefaultSharedPreferences(this).getBoolean(
-                AppConstants.GEOFENCES_ADDED_KEY, false);
-    }
-
-    /**
-     * Stores whether geofences were added ore removed in {@link SharedPreferences};
-     *
-     * @param added Whether geofences were added or removed.
-     */
-    private void updateGeofencesAdded(boolean added) {
-        PreferenceManager.getDefaultSharedPreferences(this)
-                .edit()
-                .putBoolean(AppConstants.GEOFENCES_ADDED_KEY, added)
-                .apply();
-    }
-
-    /**
-     * Adds geofences. This method should be called after the user has granted the location
-     * permission.
-     */
-    @SuppressWarnings("MissingPermission")
-    private void addGeofences() {
-//        if (!checkPermissions()) {
-//            showSnackbar(getString(R.string.insufficient_permissions));
-//            return;
-//        }
-        mGeofencingClient.addGeofences(getGeofencingRequest(), getGeofencePendingIntent())
-                .addOnCompleteListener(this);
-    }
-    /**
-     * Removes geofences. This method should be called after the user has granted the location
-     * permission.
-     */
-    @SuppressWarnings("MissingPermission")
-    private void removeGeofences() {
-//        if (!checkPermissions()) {
-//            showSnackbar(getString(R.string.insufficient_permissions));
-//            return;
-//        }
-        mGeofencingClient.removeGeofences(getGeofencePendingIntent()).addOnCompleteListener(this);
-    }
-
-    /**
-     * Receiver for geofence transition changes.
-     * <p>
-     * Receives geofence transition events from Location Services in the form of an Intent containing
-     * the transition type and geofence id(s) that triggered the transition. Creates a JobIntentService
-     * that will handle the intent in the background.
-     */
-    public class GeofenceBroadcastReceiver extends BroadcastReceiver {
-
-        /**
-         * Receives incoming intents.
-         *
-         * @param context the application context.
-         * @param intent  sent by Location Services. This Intent is provided to Location
-         *                Services (inside a PendingIntent) when addGeofences() is called.
-         */
-        @Override
-        public void onReceive(Context context, Intent intent) {
-//            if (!TextUtils.equals(, intent.getAction())) {
-//                Toast.makeText(context, "Received an unsupported action in GeofenceReceiver: action="
-//                        + intent.getAction(), Toast.LENGTH_LONG).show();
-//                return;
-//            }
-
-            // Enqueues a JobIntentService passing the context and intent as parameters
-            //GeofenceTransitionsJobIntentService.enqueueWork(context, intent);
-            GeofencingEvent geofencingEvent = GeofencingEvent.fromIntent(intent);
-            if (geofencingEvent.hasError()) {
-                //String errorMessage = //GeofenceErrorMessages.getErrorString(this,
-                        //geofencingEvent.getErrorCode());
-                //Log.e(TAG, errorMessage);
-                Log.e(TAG, "Geofence error");
-                Toast.makeText(context, "Geofence error", Toast.LENGTH_LONG).show();
-                return;
-            }
-
-            // Get the transition type.
-            int geofenceTransition = geofencingEvent.getGeofenceTransition();
-
-            // Test that the reported transition was of interest.
-            if (geofenceTransition == Geofence.GEOFENCE_TRANSITION_ENTER ||
-                    geofenceTransition == Geofence.GEOFENCE_TRANSITION_EXIT) {
-
-                mGeofencingEvent = new GeoFencingEvent();
-                mGeofencingEvent.GeTimestamp = System.currentTimeMillis();
-                mGeofencingEvent.mTransition = geofenceTransition;
-                //new insertFenceAsyncTask(mDB.geoFencingEventDao()).execute(mGeofencingEvent);
-
-//                WelcomeFragment fragment = (WelcomeFragment)context().
-//                        findFragmentByTag(WelcomeFragment.TAG);
-//                //findFragmentById(R.id.fragment_container);
-//                if(fragment != null){
-//                    fragment.setHomeCoordinate(place.getLatLng());
-//                }
-
-                // TODO: Fencing is always Home
-                // Get the geofences that were triggered. A single event can trigger multiple geofences.
-                List<Geofence> triggeringGeofences = geofencingEvent.getTriggeringGeofences();
-
-                // Get the transition details as a String. TODO: not need for DB
-                String geofenceTransitionDetails = getGeofenceTransitionDetails(geofenceTransition,
-                        triggeringGeofences);
-                //TODO: Send notification and log the transition details.
-                //sendNotification(geofenceTransitionDetails);
-                Log.i(TAG, geofenceTransitionDetails);
-                Toast.makeText(context,geofenceTransitionDetails,Toast.LENGTH_LONG).show();
-            } else {
-                // Log the error.
-                Toast.makeText(context,getString(R.string.geofence_transition_invalid_type,
-                        geofenceTransition),Toast.LENGTH_LONG).show();
-                Log.e(TAG, getString(R.string.geofence_transition_invalid_type, geofenceTransition));
-            }
-
-        }
-
-        /**
-         * Gets transition details and returns them as a formatted string.
-         *
-         * @param geofenceTransition    The ID of the geofence transition.
-         * @param triggeringGeofences   The geofence(s) triggered.
-         * @return                      The transition details formatted as String.
-         */
-        private String getGeofenceTransitionDetails(
-                int geofenceTransition,
-                List<Geofence> triggeringGeofences) {
-
-            String geofenceTransitionString = getTransitionString(geofenceTransition);
-
-            // Get the Ids of each geofence that was triggered.
-            ArrayList<String> triggeringGeofencesIdsList = new ArrayList<>();
-            for (Geofence geofence : triggeringGeofences) {
-                triggeringGeofencesIdsList.add(geofence.getRequestId());
-            }
-            String triggeringGeofencesIdsString = TextUtils.join(", ",  triggeringGeofencesIdsList);
-
-            return geofenceTransitionString + ": " + triggeringGeofencesIdsString;
-        }
-
-        /**
-         * Maps geofence transition types to their human-readable equivalents.
-         *
-         * @param transitionType    A transition type constant defined in Geofence
-         * @return                  A String indicating the type of transition
-         */
-        private String getTransitionString(int transitionType) {
-            switch (transitionType) {
-                case Geofence.GEOFENCE_TRANSITION_ENTER:
-                    return "entering";//getString(R.string.geofence_transition_entered);
-                case Geofence.GEOFENCE_TRANSITION_EXIT:
-                    return "exiting"; //getString(R.string.geofence_transition_exited);
-                default:
-                    return "unknown";//getString(R.string.unknown_geofence_transition);
-            }
-        }
-
-    }
-
-    private static class insertFenceAsyncTask extends AsyncTask<GeoFencingEvent, Void, Void> {
-
-        private GeoFencingEventDao mAsyncTaskDao;
-
-        insertFenceAsyncTask(GeoFencingEventDao dao) {
-            mAsyncTaskDao = dao;
-        }
-
-        @Override
-        protected Void doInBackground(GeoFencingEvent... geoFencingEvents) {
-            mAsyncTaskDao.insert(geoFencingEvents[0]);
             return null;
         }
     }
