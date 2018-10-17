@@ -1,29 +1,26 @@
 package it.polimi.steptrack.ui;
 
 import android.Manifest;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
-import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
-import android.text.TextUtils;
+import android.support.v7.app.AlertDialog;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.support.design.widget.NavigationView;
 import android.support.v4.view.GravityCompat;
@@ -33,7 +30,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.TextView;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
@@ -42,13 +39,8 @@ import com.google.android.gms.location.places.Place;
 import com.google.android.gms.location.places.ui.PlacePicker;
 import com.google.android.gms.maps.model.LatLng;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ListIterator;
 
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.BuildConfig;
@@ -61,7 +53,6 @@ import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
 import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
-import it.polimi.steptrack.services.DataExportIntentService;
 import it.polimi.steptrack.services.StepTrackingService;
 
 public class MainActivity extends AppCompatActivity
@@ -73,8 +64,9 @@ public class MainActivity extends AppCompatActivity
     final MainActivity self = this;
 
     // Used in checking for runtime permissions.
-    private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34; //TODO should be 12345??
+    private static final int REQUEST_PERMISSIONS_REQUEST_CODE = 34;
     private static final String[] permissionsArray = {
+            Manifest.permission.RECEIVE_BOOT_COMPLETED,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECEIVE_BOOT_COMPLETED,
@@ -82,14 +74,10 @@ public class MainActivity extends AppCompatActivity
             Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
 
-    FloatingActionButton fab1;
-    FloatingActionButton fab2;
-
     private static final int PLACE_PICKER_REQUEST = 1;
 
-    // A reference to the service used to get location updates.
+    // A reference to the service used to track walking activity.
     private StepTrackingService mService = null;
-    //private StepTrackingService2 mService2 = null;
     // Tracks the bound state of the service.
     private boolean mBound = false;
     // Monitors the state of the connection to the service.
@@ -107,11 +95,6 @@ public class MainActivity extends AppCompatActivity
         }
     };
 
-    /* Checks if external storage is available for read and write */
-    public boolean isExternalStorageWritable() {
-        String state = Environment.getExternalStorageState();
-        return Environment.MEDIA_MOUNTED.equals(state);
-    }
 
 
     @Override
@@ -121,7 +104,7 @@ public class MainActivity extends AppCompatActivity
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        //set-up bootreceiver
+        //TODO: set-up bootreceiver
         final ComponentName onBootReceiver = new ComponentName(getApplication().getPackageName(), ServiceRestartReceiver.class.getName());
         if(getPackageManager().getComponentEnabledSetting(onBootReceiver) != PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
             getPackageManager().setComponentEnabledSetting(onBootReceiver,PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);
@@ -140,11 +123,12 @@ public class MainActivity extends AppCompatActivity
             requestPermissions();
         }
 
-//        WelcomeFragment fragment = new WelcomeFragment();
-//        getSupportFragmentManager().beginTransaction()
-//                .add(R.id.fragment_container, fragment, WelcomeFragment.TAG).commit();
-
         //TODO: Check if address is set, if not popup place picking dialog
+        LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
+        if (latLng == null){
+            Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
+            PickHomeAddress();
+        }
         //StatusFragment fragment = StatusFragment.newInstance(45.482134, 9.224853);
 //        getSupportFragmentManager().beginTransaction()
 //                .add(R.id.fragment_container, fragment, StatusFragment.TAG).commit();
@@ -152,10 +136,6 @@ public class MainActivity extends AppCompatActivity
         //TODO: *** Start service for counting steps
         // Check if the service is running
         if (AppUtils.getServiceRunningStatus(self) <= 0) {
-
-//            //TODO: Mark Service as Started
-//            AppUtils.setServiceRun(this, false);
-
             // Start Step Counting service
             Intent serviceIntent = new Intent(this, StepTrackingService.class);
             startService(serviceIntent); //Activate onStartCommand
@@ -371,26 +351,6 @@ public class MainActivity extends AppCompatActivity
             fragmentManager.beginTransaction()
                     .add(R.id.fragment_container, fragment, StatusFragment.TAG)
                     .commit();
-
-////            // Extract the place information from the API
-//            //Temperately use sharedpreference
-//            AppUtils.setPrefPlace(self,place);
-//            WelcomeFragment fragment = (WelcomeFragment)getSupportFragmentManager().
-//                    findFragmentByTag(WelcomeFragment.TAG);
-//                    //findFragmentById(R.id.fragment_container);
-//            if(fragment != null){
-//                fragment.setHomeCoordinate(place.getLatLng());
-////                TextView textView = fragment.getView().findViewById(R.id.tvSteps);
-////                textView.setText("Home is: " + place.getLatLng().toString());
-//            }
-//            Toast.makeText(self,getString(R.string.home_address_added), Toast.LENGTH_SHORT).show();
-////            // Insert a new place into DB TODO
-////            ContentValues contentValues = new ContentValues();
-////            contentValues.put(PlaceContract.PlaceEntry.COLUMN_PLACE_ID, placeID);
-////            getContentResolver().insert(PlaceContract.PlaceEntry.CONTENT_URI, contentValues);
-////
-////            // Get live data information
-////            refreshPlacesData();
         }
         else{
             Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
@@ -477,10 +437,10 @@ public class MainActivity extends AppCompatActivity
                 Log.i(TAG, "User interaction was cancelled.");
             } else if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission was granted. TODO make this only for location update
-                //mService.requestLocationUpdates();
+                //mService.requestNewWalkingSession();
             } else {
                 // Permission denied.
-                setButtonsState(false);
+                // setButtonsState(false);
                 Snackbar.make(
                         findViewById(R.id.drawer_layout),
                         R.string.permission_denied_explanation,
@@ -504,50 +464,41 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    private void setButtonsState(boolean requestingLocationUpdates) {
-        if (requestingLocationUpdates) {
-            fab1.hide();//.setEnabled(false);
-            fab2.show();//.setEnabled(true);
-        } else {
-            fab1.show();//.setEnabled(true);
-            fab2.hide();//.setEnabled(false);
-        }
-    }
 
     private void ExportData(){
-        if(!isExternalStorageWritable()){
+        if(!AppUtils.isExternalStorageWritable()){
             Log.w(TAG, "External memory not available");
             return;
         }
 
         Log.w(TAG, "Prepare to read DB");
+//        Thread t = new Thread() {
+//            public void run() {
+//                AppDatabase mDB = AppDatabase.getInstance(self);
+//                List<String> rawDataList = new ArrayList<String>();
+//                for (AccelerometerSample sample : mDB.accSampleDao().getAllSamplesSynchronous()) {
+//                    rawDataList.add(sample.toString());
+//                }
+//                String filename = "accSamples.csv";
+//                final String header = "session_id, timestamp, acc_x, acc_y, acc_z \n";
+//                AppUtils.writeFile(filename, header, rawDataList);
+//            }
+//        };
+//        t.start();
+//        t = new Thread() {
+//            public void run() {
+//                AppDatabase mDB = AppDatabase.getInstance(self);
+//                List<String> rawDataList = new ArrayList<String>();
+//                for (GeoFencingEvent event : mDB.geoFencingEventDao().getAllFencesSynchronous()) {
+//                    rawDataList.add(event.toString());
+//                }
+//                String filename = "Geofences.csv";
+//                final String header = "timestamp, transition \n";
+//                AppUtils.writeFile(filename, header, rawDataList);
+//            }
+//        };
+//        t.start();
         Thread t = new Thread() {
-            public void run() {
-                AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
-                for (AccelerometerSample sample : mDB.accSampleDao().getAllSamplesSynchronous()) {
-                    rawDataList.add(sample.toString());
-                }
-                String filename = "accSamples.csv";//"Insoles - " + sessionDate;
-                final String header = "session_id, timestamp, acc_x, acc_y, acc_z \n";
-                AppUtils.writeFile(filename, header, rawDataList);
-            }
-        };
-        t.start();
-        t = new Thread() {
-            public void run() {
-                AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
-                for (GeoFencingEvent event : mDB.geoFencingEventDao().getAllFencesSynchronous()) {
-                    rawDataList.add(event.toString());
-                }
-                String filename = "Geofences.csv";
-                final String header = "timestamp, transition \n";
-                AppUtils.writeFile(filename, header, rawDataList);
-            }
-        };
-        t.start();
-        t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
                 List<String> rawDataList = new ArrayList<String>();
@@ -586,19 +537,19 @@ public class MainActivity extends AppCompatActivity
             }
         };
         t.start();
-        t = new Thread() {
-            public void run() {
-                AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
-                for (GyroscopeSample gyroSample : mDB.gyroSampleDao().getAllSamplesSynchronous()) {
-                    rawDataList.add(gyroSample.toString());
-                }
-                String filename = "gyroSamples.csv";//"Insoles - " + sessionDate;
-                final String header = "session_id, timestamp, gyro_x, gyro_y, gyro_z \n";
-                AppUtils.writeFile(filename, header, rawDataList);
-            }
-        };
-        t.start();
+//        t = new Thread() {
+//            public void run() {
+//                AppDatabase mDB = AppDatabase.getInstance(self);
+//                List<String> rawDataList = new ArrayList<String>();
+//                for (GyroscopeSample gyroSample : mDB.gyroSampleDao().getAllSamplesSynchronous()) {
+//                    rawDataList.add(gyroSample.toString());
+//                }
+//                String filename = "gyroSamples.csv";//"Insoles - " + sessionDate;
+//                final String header = "session_id, timestamp, gyro_x, gyro_y, gyro_z \n";
+//                AppUtils.writeFile(filename, header, rawDataList);
+//            }
+//        };
+//        t.start();
     }
 
     @Override
@@ -607,9 +558,42 @@ public class MainActivity extends AppCompatActivity
             case StatusFragment.ON_START_CLICKED:
                 if (mService != null){
                     if (! AppUtils.startingWalkingSession(self)){
-                        mService.requestLocationUpdates();
+                        mService.requestNewWalkingSession();
                     }else {
-                        mService.removeLocationUpdates();
+                        /**
+                         * Pop up dialog for walking session Tag
+                         */
+                        //String final textTag;
+                        View setTagView = LayoutInflater.from(self).inflate(R.layout.dialog_input_tag, null);
+                        AlertDialog.Builder setTagDialogBuilder = new AlertDialog.Builder(self);
+                        setTagDialogBuilder.setView(setTagView);
+                        EditText editTag = (EditText) setTagView.findViewById(R.id.editTag);
+                        setTagDialogBuilder.setCancelable(false)
+                                .setPositiveButton("Save",
+                                        new DialogInterface.OnClickListener() {
+                                            @Override
+                                            public void onClick(DialogInterface dialog, int which) {
+                                                String textTag = editTag.getText().toString();
+                                                //send this value to Service.
+                                                mService.manualEndWalkingSession(textTag);
+                                                //TODO: this should be done after the task finished (wait for result?)
+                                                Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
+                                            }
+                                        })
+                                .setNegativeButton("Cancel",
+                                        new DialogInterface.OnClickListener() {
+                                            @Override
+                                            public void onClick(DialogInterface dialog, int which) {
+                                                dialog.cancel();
+                                                Toast.makeText(self, "Session not stopped", Toast.LENGTH_SHORT).show();
+                                            }
+                                        });
+                        AlertDialog setTagDialog = setTagDialogBuilder.create();
+                        setTagDialog.show();
+
+//                        mService.manualEndWalkingSession();
+//                        //TODO: this should be done after the task finished (wait for result?)
+//                        Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
                     }
                 }
                 //Toast.makeText(self, "Clicked started", Toast.LENGTH_LONG).show();

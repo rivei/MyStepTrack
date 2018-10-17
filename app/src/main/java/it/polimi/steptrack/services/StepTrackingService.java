@@ -19,11 +19,11 @@ import android.location.Location;
 import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
-import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
@@ -37,10 +37,6 @@ import com.google.android.gms.location.ActivityTransitionRequest;
 import com.google.android.gms.location.ActivityTransitionResult;
 import com.google.android.gms.location.DetectedActivity;
 import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.Geofence;
-import com.google.android.gms.location.GeofencingClient;
-import com.google.android.gms.location.GeofencingEvent;
-import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
@@ -52,6 +48,10 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,11 +59,9 @@ import it.polimi.steptrack.AppConstants;
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
-import it.polimi.steptrack.roomdatabase.dao.GeoFencingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
-import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
 import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
@@ -76,15 +74,21 @@ public class StepTrackingService extends Service
         implements SensorEventListener{
 
     private static final String PACKAGE_NAME = "it.polimi.steptrack";
-
     private static final String TAG = StepTrackingService.class.getSimpleName();
-
-    private boolean mSessionStarted = false; //Activate location update only when session starts
+    private StepTrackingService self = this;
 
     /**
-     * The name of the channel for notifications.
+     * State variables
      */
-    private static final String CHANNEL_ID = "channel_01";
+    private boolean mSessionStarted = false; //Activate location update and sensors listener only when session starts
+    private int mIsWalking = -1; //Start walking = 0; stop walking = 1;
+    private boolean mOutofHome = false; //radius greater than threshold.
+    private boolean mManualMode = false; //when manual mode is true, walking session doesn't depends on other things;
+
+    /**
+     * For App notification
+     */
+    private static final String CHANNEL_ID = "channel_01"; //notification channel name
 
     static final String ACTION_BROADCAST = PACKAGE_NAME + ".broadcast";
 
@@ -94,11 +98,7 @@ public class StepTrackingService extends Service
 
     private final IBinder mBinder = new LocalBinder();
 
-
-    /**
-     * The identifier for the notification displayed for the foreground service.
-     */
-    private static final int NOTIFICATION_ID = 12345678;
+    private static final int NOTIFICATION_ID = 12345678; //The identifier for the notification displayed for the foreground service.
     /**
      * Used to check whether the bound activity has really gone away and not unbound as part of an
      * orientation change. We create a foreground service notification only if the former takes
@@ -106,12 +106,15 @@ public class StepTrackingService extends Service
      */
     private boolean mChangingConfiguration = false;
     private NotificationManager mNotificationManager;
-    private NotificationCompat.Builder mBuilder;
-    private String mNotifContentText;
+    private NotificationCompat.Builder mNotificationBuilder;
+    private String mNotificationContentText;
+
+
     /**
      * Contains parameters used by {@link com.google.android.gms.location.FusedLocationProviderClient}.
      */
-    private LocationRequest mLocationRequest;
+    private LocationRequest mLocationFastRequest;
+    //private LocationRequest mLocationSlowRequest;
 
     /**
      * Provides access to the Fused Location Provider API.
@@ -129,19 +132,16 @@ public class StepTrackingService extends Service
      * The current location.
      */
     private Location mLocation;
+    private LatLng mHomeCoordinate = null;
 
 
     /**
      * For activity detection
      */
-//    private ActivityRecognitionClient mActivityRecognitionClient; // The entry point for interacting with activity recognition.
-//    protected ActivityDetectionReceiver mBroadcastReceiver;
     private PendingIntent mPendingIntent;
     private TransitionsReceiver mTransitionsReceiver;
-    private int mIsWalking = -1;
 
 
-    private LatLng mHomeCoordinate = null;
 
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
@@ -150,12 +150,18 @@ public class StepTrackingService extends Service
     private Sensor gyroSensor = null;
     private Sensor magnSensor = null;
 
+    float[] accelerometerMatrix = new float[3];
+    float[] gyroscopeMatrix = new float[3];
+    float[] magneticMatrix = new float[3];
+
     private long sensorTimeRef1 = -1L;
     private long sensorTimeRef2 = -1L;
     private long sysTimeRef1 = -1L;
     private long sysTimeRef2 = -1L;
     private long startoffset = -1L;
     private long rateoffset = -1L;
+    private long curTime = -1L;
+    private long lastUpdate = -1L;
 
     //TODO: for database:
     private AppDatabase mDB;
@@ -168,14 +174,24 @@ public class StepTrackingService extends Service
     private WalkingSession mWalkingSession;
     private long mWalkingSessionId = -1;
     private int mStepsCount = 0;
+    private int stepsCountS = 0;
+    private int mStepsDetect = 0;
+
+    private File mStepTrackDir = null;
+    private File mSessionFile = null;
+    private final String sessionHeader = "systemtime,timestamp,acc_X,acc_Y,acc_Z,gyro_X,gyro_Y,gyro_Z," +
+                                        "magn_X,magn_Y,magn_Z,latitude,longitude,accuracy,speed \n";
 
 
-    public StepTrackingService() {
+    public StepTrackingService() { //Empty constructor
     }
 
     @Override
     public void onCreate() {
         Log.w(TAG, "On Creating");
+        /**
+         * setup fused location client and call back
+         */
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
         mLocationCallback = new LocationCallback() {
@@ -186,14 +202,17 @@ public class StepTrackingService extends Service
             }
         };
 
-        createLocationRequest();
-        getLastLocation(); //This is just a fuse location without high accuracy
+        initLocationRequest(); //for location request when walking is detected.
+        //getLastLocation(); //This is just a fuse location without high accuracy
 
         HandlerThread handlerThread = new HandlerThread(TAG);
         handlerThread.start();
         mServiceHandler = new Handler(handlerThread.getLooper());
         //***HandlerThread needs to call myHandlerThread.quit() to free the resources and stop the execution of the thread.
 
+        /**
+         * Set up sensors
+         */
         mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (mSensorManager != null) {
             countSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
@@ -215,7 +234,7 @@ public class StepTrackingService extends Service
         mStepsCount = AppUtils.getLastStepCount(this) - AppUtils.getStepCountOffset(this);
 
         // Get Notification Manager
-        mBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
+        mNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
         // Android O requires a Notification Channel.
@@ -230,65 +249,43 @@ public class StepTrackingService extends Service
         }
 
 
-        //******************** Activity Detection *************************************//
-//        mActivityRecognitionClient = new ActivityRecognitionClient(this);
-//        mBroadcastReceiver = new ActivityDetectionReceiver();
+        /**
+         * Activity Detection
+          */
         Intent intent = new Intent(AppConstants.TRANSITIONS_RECEIVER_ACTION);
         mPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
-        //PendingIntent.getService(this,)
         mTransitionsReceiver = new TransitionsReceiver();
         registerReceiver(mTransitionsReceiver, new IntentFilter(AppConstants.TRANSITIONS_RECEIVER_ACTION));
 
-
         //TODO: db
-        //mAccRepo = ((BasicApp)apl
         mDB = AppDatabase.getInstance(this);
+
+        /**
+         * Setup File path for tracking records
+         */
+        String pathToExternalStorage = Environment.getExternalStorageDirectory().toString();
+        mStepTrackDir = new File(pathToExternalStorage, "/StepTrack");
+        if (!mStepTrackDir.exists()) {
+            Boolean created = mStepTrackDir.mkdirs();
+            //mainActivity.logger.i(getActivity(), TAG, "Export Dir created: " + created);
+        }
+        File exportDir = new File(mStepTrackDir, "/export");
+        if (!exportDir.exists()){
+            exportDir.mkdirs();
+        }
     }
 
     //This is called only when there is Start service
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(TAG, "Service started");
-//        TODO-NOTE: removed because not need action in the notification
-//        boolean startedFromNotification = intent.getBooleanExtra(EXTRA_STARTED_FROM_NOTIFICATION,
-//                false);
-//
-//        // We got here because the user decided to remove location updates from the notification.
-//        if (startedFromNotification) {
-//            removeLocationUpdates();
-//            stopSelf();
-//        }
-//        // Tells the system to not try to recreate the service after it has been killed.
-//        return START_NOT_STICKY;
-//
+        Log.i(TAG, "Foreground service started");
 
         //************************* For step count ~*********************//
-/*
-        // Setup First Notification TODO-Q?? the first is set when calling start foregound?
-        mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-        //updateNotification(true);
-
-        // Setup Shared Preference Change Listener
-        SharedPreferences sharedPreferences;
-        sharedPreferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        SharedPreferences.OnSharedPreferenceChangeListener sharedPreferenceChangeListener = new SharedPreferences.OnSharedPreferenceChangeListener() {
-            @Override
-            public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-                // Update Notification Bar
-                //updateNotification(false);
-                mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-            }
-        };
-        sharedPreferences.registerOnSharedPreferenceChangeListener(sharedPreferenceChangeListener);
-*/
         //TODO: start Monitoring activities and locations
         setupActivityTransitions();
 
-//        //TODO: make the notification works when the service resume from phone reboot
-        if (!AppUtils.getKeyActivityActive(this)){
-            startForeground(NOTIFICATION_ID, getNotification(true));
-        }
-
+        //start foreground in all situations
+        startForeground(NOTIFICATION_ID, getNotification(true));
         // Restart the service if its killed
         return START_STICKY;
     }
@@ -370,17 +367,14 @@ public class StepTrackingService extends Service
      * Makes a request for location updates. Note that in this sample we merely log the
      * {@link SecurityException}.
      */
-    public void requestLocationUpdates() {
+    public void requestNewWalkingSession() {
         mSessionStarted = true;
-        Log.i(TAG, "Requesting location updates");
-        //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
+        Log.i(TAG, "Requesting new walking session");
         AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
-        //TODO-NOTE: here makes the call for onStartCommand.
-        //startService(new Intent(getApplicationContext(), StepTrackingService.class));
         try {
-            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
+            mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
                     mLocationCallback, Looper.myLooper());
-            //TODO: locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, new MyLocationListener());
+            //TODO: locationManager.requestNewWalkingSession(LocationManager.GPS_PROVIDER, 5000, 10, new MyLocationListener());
             //Add sensor listener:
         } catch (SecurityException unlikely) {
             mSessionStarted = false;
@@ -390,52 +384,87 @@ public class StepTrackingService extends Service
         }
         mWalkingSession = new WalkingSession();
         mWalkingSession.mStartTime = System.currentTimeMillis();
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                mWalkingSessionId = mDB.sessionDao().insert(mWalkingSession);
-//                mWalkingSession.sid = mWalkingSessionId;
-//            }
-//        }).run();
+        stepsCountS = mStepsCount;
+
         Thread t = new Thread() {
             public void run() {
                 mWalkingSessionId = mDB.sessionDao().insert(mWalkingSession);
                 mWalkingSession.sid = mWalkingSessionId;
+                /**
+                 * create walking session file
+                 */
+                mSessionFile = new File(mStepTrackDir, mWalkingSessionId+".csv");
+                if(!mSessionFile.exists()) {
+                    try {
+                        mSessionFile.createNewFile();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        Log.e(TAG, "error in file creation");
+                    }
+                }
+                FileOutputStream outputStream;
+                try {
+                    outputStream = new FileOutputStream(mSessionFile);
+                    outputStream.write(sessionHeader.getBytes()); //write header
+                    outputStream.close();
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                    Log.e(TAG,"create session file failed.");
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.e(TAG, "write session header failed");
+                }
             }
         };
         t.start();
 
-        if (accSensor != null) {
-            //TODO: Accelerometer sensor registration listener
-            Toast.makeText(this, "Started Acceleration", Toast.LENGTH_LONG).show();
-            mSensorManager.registerListener(this, accSensor, SensorManager.SENSOR_DELAY_FASTEST);
+        if (registerSensorListener()) {
+            Toast.makeText(this, "Starts session ", Toast.LENGTH_LONG).show();
         } else {
-            Toast.makeText(this, "Accelerometer not Compatible!", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "some sensor not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
         }
+    }
 
-        if (gyroSensor != null) {
-            //TODO: Gyroscope sensor registration listener
-            Toast.makeText(this, "Started Gyroscope", Toast.LENGTH_LONG).show();
-            mSensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_FASTEST);
-        } else {
-            Toast.makeText(this, "Gyroscope not Compatible!", Toast.LENGTH_LONG).show();
-            this.stopSelf();
+    private boolean registerSensorListener(){
+        boolean isSuccess = false;
+        int numofSensors = 0;
+        if(accSensor != null){
+            mSensorManager.registerListener(self, accSensor, SensorManager.SENSOR_DELAY_FASTEST);
+            numofSensors++;
         }
+        if (gyroSensor != null){
+            mSensorManager.registerListener(self, gyroSensor, SensorManager.SENSOR_DELAY_FASTEST);
+            numofSensors++;
+        }
+        if(magnSensor != null){
+            mSensorManager.registerListener(self, magnSensor, SensorManager.SENSOR_DELAY_FASTEST);
+            numofSensors++;
+        }
+        if(stepDetectSensor != null){
+            mSensorManager.registerListener(self, stepDetectSensor, SensorManager.SENSOR_DELAY_NORMAL,0);
+            numofSensors++;
+        }
+        if(numofSensors >= 4){
+            isSuccess = true;
+        }
+        return isSuccess;
     }
 
     /**
      * Removes location updates. Note that in this sample we merely log the
      * {@link SecurityException}.
      */
-    public void removeLocationUpdates() {
-        Log.i(TAG, "Removing location updates");
+    public void manualEndWalkingSession(String inputTag) {
+        Log.i(TAG, "Manually stopping sensor session.");
+        clearSensorOffset();
         try {
             mSessionStarted = false;
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
             //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
             AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
             //stopSelf(); //TODO: move this to the whole service
+            mSessionFile = null; //TODO: **** check if this works
 
         } catch (SecurityException unlikely) {
             mSessionStarted = true;
@@ -443,20 +472,18 @@ public class StepTrackingService extends Service
             AppUtils.setKeyStartingWalkingSession(this,mSessionStarted);
             Log.e(TAG, "Lost location permission. Could not remove updates. " + unlikely);
         }
-        //TODO: unregister sensor
 //        mSessionStarted = false;
 //        AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
         if (mWalkingSessionId != -1) {
             mWalkingSession.mEndTime = System.currentTimeMillis();
+
             mWalkingSession.mDuration = mWalkingSession.mEndTime - mWalkingSession.mStartTime;
-            SharedPreferences prefs = this.getSharedPreferences(PREFS_NAME, 0);
-            mWalkingSession.mStepCount = prefs.getInt("stepCount", 0);
-//            new Thread(new Runnable() {
-//                @Override
-//                public void run() {
-//                    mDB.sessionDao().update(mWalkingSession);
-//                }
-//            }).run();
+            //SharedPreferences prefs = this.getSharedPreferences(PREFS_NAME, 0);
+            mWalkingSession.mStepCount = mStepsCount - stepsCountS;
+            mWalkingSession.mStepDetect = mStepsDetect;
+            mStepsDetect = 0;
+            mWalkingSession.mTag = inputTag;
+
             Thread t = new Thread() {
                 public void run() {
                     mDB.sessionDao().update(mWalkingSession);
@@ -465,8 +492,7 @@ public class StepTrackingService extends Service
             t.start();
             mWalkingSessionId = -1;
         }
-        mSensorManager.unregisterListener(this);
-        clearSensorOffset();
+        mSensorManager.unregisterListener(this); //unregiester motion sensors
         //Never stop step counter sensor listening
         mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
     }
@@ -476,12 +502,12 @@ public class StepTrackingService extends Service
      */
     private Notification getNotification(boolean isFirstTime) {
         String msg = "Step Counter - Counting";
-        if (mNotifContentText != null) msg = mNotifContentText;
+        if (mNotificationContentText != null) msg = mNotificationContentText;
         if (isFirstTime) {
             // PendingIntent to launch activity.
             PendingIntent activityPendingIntent = PendingIntent.getActivity(this, 0,
                     new Intent(this, MainActivity.class), 0);
-            mBuilder.setContentIntent(activityPendingIntent)
+            mNotificationBuilder.setContentIntent(activityPendingIntent)
                     .setContentText(msg)
                     .setContentTitle(AppUtils.getLocationTitle(this))
                     .setOngoing(true)
@@ -493,23 +519,23 @@ public class StepTrackingService extends Service
                     .setOnlyAlertOnce(true);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mBuilder.setVisibility(Notification.VISIBILITY_SECRET);
+                mNotificationBuilder.setVisibility(Notification.VISIBILITY_SECRET);
             }
             // Set the Channel ID for Android O.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                mBuilder.setChannelId(CHANNEL_ID); // Channel ID
+                mNotificationBuilder.setChannelId(CHANNEL_ID); // Channel ID
             }
         }
         // Update Step Count
-        mBuilder.setSmallIcon(R.mipmap.ic_tracking); //It's a must
-        mBuilder.setContentTitle(mStepsCount + " steps taken");
+        mNotificationBuilder.setSmallIcon(R.mipmap.ic_tracking); //It's a must
+        mNotificationBuilder.setContentTitle(mStepsCount + " steps taken");
         if (mSessionStarted) {
-            //mBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
+            //mNotificationBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
         } else {
-            mBuilder.setContentText(msg);
+            mNotificationBuilder.setContentText(msg);
         }
 
-        return mBuilder.build();
+        return mNotificationBuilder.build();
     }
 
     private void getLastLocation() {
@@ -579,16 +605,82 @@ public class StepTrackingService extends Service
     /**
      * TODO-NOTE: Sets the location request parameters.update interval and accuracy
      */
-    private void createLocationRequest() {
-        mLocationRequest = new LocationRequest();
-        mLocationRequest.setInterval(AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS);
-        mLocationRequest.setFastestInterval(AppConstants.FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+    private void initLocationRequest() {
+//        mLocationSlowRequest = new LocationRequest();
+//        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS);
+//        mLocationSlowRequest.setFastestInterval(UPDATE_INTERVAL_IN_MILLISECONDS);
+//        mLocationSlowRequest.setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
+
+        mLocationFastRequest = new LocationRequest();
+        mLocationFastRequest.setInterval(AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS);
+        mLocationFastRequest.setFastestInterval(AppConstants.FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
+        mLocationFastRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        if (sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
+        //curTime = getCurrentTimestamp(sensorEvent.timestamp);
+        //if (curTime > 0) {
+        if (mWalkingSessionId != -1 && mSessionFile.exists()) {
+            FileOutputStream outputStream;
+            String dataLine = "";
+            long systime = System.currentTimeMillis();
+            curTime = sensorEvent.timestamp;
+            switch (sensorEvent.sensor.getType()) {
+                case Sensor.TYPE_STEP_DETECTOR:
+                    mStepsDetect += 1;//sensorEvent.values[0];//+= sensorEvent.values.length;
+                    dataLine = systime + "," + curTime + "," + mStepsDetect +"\n";
+                    try {
+                        outputStream = new FileOutputStream(mSessionFile, true);
+                        outputStream.write(dataLine.getBytes());
+                        outputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        Log.e(TAG, "write step data failed");
+                    }
+                    break;
+                case Sensor.TYPE_ACCELEROMETER:
+                    accelerometerMatrix = sensorEvent.values;
+                    break;
+                case Sensor.TYPE_GYROSCOPE:
+                    gyroscopeMatrix = sensorEvent.values;
+                    break;
+                case Sensor.TYPE_MAGNETIC_FIELD:
+                    magneticMatrix = sensorEvent.values;
+                    break;
+            }
+
+            //TODO: set sensor update frequency in ms
+            ////This can't be set below 10ms due to Android/hardware limitations. Use 9 to get more accurate 10ms intervals
+            if ((curTime - lastUpdate) >= 10 * 1000000) {
+                lastUpdate = curTime;
+                if(mLocation != null && (mLocation.getTime()/1000) == (systime/1000)){//only log when there is location
+                    dataLine = systime + "," + curTime + "," +
+                            accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
+                            gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
+                            magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," +
+                            mLocation.getLatitude() + "," + mLocation.getLongitude() + "," +
+                            mLocation.getAccuracy() + "," + mLocation.getSpeed() + "\n";
+                }else {
+                    dataLine = systime + "," + curTime + "," +
+                            accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
+                            gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
+                            magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," + ",,,\n";
+                }
+                try {
+                    //Log.w(TAG,"Thread starts");
+                    outputStream = new FileOutputStream(mSessionFile, true);
+                    outputStream.write(dataLine.getBytes());
+                    //Log.i(TAG, "write sensor data " + curTime);
+                    outputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.e(TAG, "write sensor data failed");
+                }
+            }
+        }
+        //}
+        if(sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER){
             // Record Step Count
             mStepsCount = (int)sensorEvent.values[0] - AppUtils.getStepCountOffset(this);
             AppUtils.setKeyLastStepCount(this, mStepsCount);
@@ -597,61 +689,7 @@ public class StepTrackingService extends Service
                 mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
             }
         }
-        if (sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            setupSensorOffset(sensorEvent.timestamp);
-            if(startoffset > 0 && rateoffset > 0){
-                if (mWalkingSessionId != -1) {
-//                    mAccSample = new AccelerometerSample();
-//                    mAccSample.SessionID = mWalkingSessionId;
-//                    mAccSample.AsTimestamp = (sensorEvent.timestamp - sensorTimeRef1) / rateoffset + sysTimeRef1;//+
-//    //                        ((sensorEvent.timestamp - sensorTimeReference)/1000000L);
-//    //                mAccSample.AsTimestamp = sensorEvent.timestamp;
-//                    mAccSample.mAccX = sensorEvent.values[0];
-//                    mAccSample.mAccY = sensorEvent.values[1];
-//                    mAccSample.mAccZ = sensorEvent.values[2];
-//                    // record acceleration
-//                    //mDB.accSampleDao().insert(mAccSample);
-//                    if (mSessionStarted) {
-//                        //mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
-//                    Thread t = new Thread() {
-//                        public void run() {
-//                            mDB.accSampleDao().insert(mAccSample);
-//
-//                        }
-//                    };
-//                    t.start();
-//                        new Thread(new Runnable() {
-//                            @Override
-//                            public void run() {
-//                                mDB.accSampleDao().insert(mAccSample);
-//                                //Log.w(TAG, "write ACC: " + mAccSample.AsTimestamp);
-//                            }
-//                        }).start();
-//                    }
-                }
-            }
-        }
-        if (sensorEvent.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
-            setupSensorOffset(sensorEvent.timestamp);
-            if (startoffset > 0 && rateoffset > 0){
-//                if(mWalkingSessionId != -1){
-//                    mGyroSample = new GyroscopeSample();
-//                    mGyroSample.SessionID = mWalkingSessionId;
-//                    mGyroSample.GyTimestamp = (sensorEvent.timestamp - sensorTimeRef1)/rateoffset + sysTimeRef1;
-//                    mGyroSample.mGyroX = sensorEvent.values[0];
-//                    mGyroSample.mGyroY = sensorEvent.values[1];
-//                    mGyroSample.mGyroZ = sensorEvent.values[2];
-//                    if (mSessionStarted){
-//                        new Thread(new Runnable() {
-//                            @Override
-//                            public void run() {
-//                                mDB.gyroSampleDao().insert(mGyroSample);
-//                            }
-//                        }).start();
-//                    }
-//                }
-            }
-        }
+
     }
 
     @Override
@@ -660,8 +698,8 @@ public class StepTrackingService extends Service
     }
 
     public void updateNotification(String msg) {
-        if (msg != null && mBuilder != null) {
-            mNotifContentText = msg;
+        if (msg != null && mNotificationBuilder != null) {
+            mNotificationContentText = msg;
             mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
         }
     }
@@ -743,29 +781,14 @@ public class StepTrackingService extends Service
                 ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
                 if (result != null) {
                     for (ActivityTransitionEvent event : result.getTransitionEvents()) {
-//                        String activity = toActivityString(event.getActivityType());
-//                        String transitionType = toTransitionType(event.getTransitionType());
-//                        mLogFragment.getLogView()
-//                                .println("Transition: "
-//                                        + activity + " (" + transitionType + ")" + "   "
-//                                        + new SimpleDateFormat("HH:mm:ss", Locale.US)
-//                                        .format(new Date()));
                         mWalkingEvent = new WalkingEvent();
                         mWalkingEvent.WeTimestamp = System.currentTimeMillis();
                         mWalkingEvent.mTransition = event.getTransitionType();
                         mWalkingEvent.mElapsedTime = event.getElapsedRealTimeNanos();
                         mIsWalking = mWalkingEvent.mTransition;
-                        Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
-                                Toast.LENGTH_LONG).show();
-                        //TODO: write db -> crashed it says it's in main thread.??
-//                        new Thread(new Runnable() {
-//                            @Override
-//                            public void run() {
-//                                //TODO:
-//                                mDB.walkingEventDao().insert(mWalkingEvent);
-//
-//                            }
-//                        }).run();
+//                        Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
+//                                Toast.LENGTH_LONG).show();
+
                         new insertAsyncTask(mDB.walkingEventDao()).execute(mWalkingEvent);
                     }
                 }
@@ -789,7 +812,8 @@ public class StepTrackingService extends Service
     }
 
 
-    private void setupSensorOffset(long timestamp){
+    private long getCurrentTimestamp(long timestamp){
+        long current = -1L;
         if(sensorTimeRef1 == -1L && sysTimeRef1 == -1L){
             sensorTimeRef1 = timestamp;
             sysTimeRef1 = System.currentTimeMillis();
@@ -804,6 +828,12 @@ public class StepTrackingService extends Service
 //            Log.e(TAG, "system time delta: " + (sysTimeRef2 - sysTimeRef1));
 //            Log.e(TAG, "sensor time delta:" + (sensorTimeRef2 - sensorTimeRef1));
         }
+
+        if(startoffset > 0 && rateoffset > 0){
+            current = (timestamp - sensorTimeRef1)/rateoffset;// + sysTimeRef1;
+        }
+
+        return current;
     }
     private void clearSensorOffset(){
         sensorTimeRef1 = -1L;
@@ -812,5 +842,7 @@ public class StepTrackingService extends Service
         sysTimeRef2 = -1L;
         rateoffset = -1L;
         startoffset = -1L;
+        curTime = -1L;
+        lastUpdate = -1L;
     }
 }

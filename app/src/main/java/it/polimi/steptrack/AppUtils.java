@@ -263,6 +263,13 @@ public class AppUtils {
         return latLng;
     }
 
+    /* Checks if external storage is available for read and write */
+    public static boolean isExternalStorageWritable() {
+        String state = Environment.getExternalStorageState();
+        return Environment.MEDIA_MOUNTED.equals(state);
+    }
+
+
     /** TODO organized in a better way
      * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone
      */
@@ -315,9 +322,20 @@ public class AppUtils {
 
     public static void writeFile(String filename, String fileheader, List<String> dataList){
         FileOutputStream outputStream;
+        String pathToExternalStorage = Environment.getExternalStorageDirectory().toString();
+        File stepTrackDir;
         File f;
         try {
-            f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), filename);
+            stepTrackDir = new File(pathToExternalStorage, "/StepTrack");
+            if (!stepTrackDir.exists()) {
+                stepTrackDir.mkdirs();
+                //mainActivity.logger.i(getActivity(), TAG, "Export Dir created: " + created);
+            }
+            File exportDir = new File(stepTrackDir, "/export");
+            if (!exportDir.exists()){
+                exportDir.mkdirs();
+            }
+            f = new File(exportDir, filename);
             outputStream = new FileOutputStream(f);
 
             // Print header

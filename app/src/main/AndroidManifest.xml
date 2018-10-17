@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="it.polimi.steptrack">
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="true" />
     <uses-feature android:name="android.hardware.sensor.gyroscope"/>
-
+    <uses-feature android:name="android.hardware.sensor.stepdetector"/>
 
     <!--
          The ACCESS_COARSE/FINE_LOCATION permissions are not required to use
@@ -21,7 +23,6 @@
     <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
 
     <!-- Permission Required for Starting the Step Counter at Boot -->
-    <!--<uses-permission android:name="android.permission.REBOOT"/>-->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
@@ -63,10 +64,12 @@
         <!--<service android:name=".services.StepTrackingService2" />-->
 
 
-        <receiver android:name=".receivers.ServiceRestartReceiver">
+        <receiver android:name=".receivers.ServiceRestartReceiver" android:enabled="true"  android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name=".RestartSensor"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <!--<action android:name=".RestartSensor"/>-->
             </intent-filter>
         </receiver>
         <receiver android:name=".receivers.PhoneShutdownReceiver">
