@@ -162,6 +162,19 @@ public class AppUtils {
                 .apply();
     }
 
+    public static final String KEY_REQUESTING_LOCATION_UPDATES_FAST = "requesting_locaction_updates_fast";
+    public static boolean requestingLocationUpdatesFast(Context context) {
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(KEY_REQUESTING_LOCATION_UPDATES_FAST, false);
+    }
+
+    public static void setKeyRequestingLocationUpdatesFast(Context context, boolean requestingLocationUpdates) {
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(KEY_REQUESTING_LOCATION_UPDATES_FAST, requestingLocationUpdates)
+                .apply();
+    }
+
     /**
      * Returns the {@code location} object as a human readable string.
      * @param location  The {@link Location}.

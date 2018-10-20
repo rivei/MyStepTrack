@@ -44,7 +44,6 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
@@ -62,20 +61,17 @@ import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
-import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
-import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
+import static it.polimi.steptrack.AppConstants.FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS;
 import static it.polimi.steptrack.AppConstants.MILLI2NANO;
 import static it.polimi.steptrack.AppConstants.MINUTE2NANO;
 import static it.polimi.steptrack.AppConstants.SECOND2NANO;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
-import static it.polimi.steptrack.AppUtils.PREFS_NAME;
-import static it.polimi.steptrack.AppUtils.isExternalStorageWritable;
-import static it.polimi.steptrack.AppUtils.writeFile;
+import static it.polimi.steptrack.AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS;
 
 public class StepTrackingService extends Service
         implements SensorEventListener, SharedPreferences.OnSharedPreferenceChangeListener {
@@ -94,6 +90,8 @@ public class StepTrackingService extends Service
     private long mTransitionExitTime = -1L;
     private boolean mOutofHome = false; //radius greater than threshold.
     private boolean mManualMode = false; //when manual mode is true, walking session doesn't depends on other things;
+    private int mGPSLostTimes = 0;
+    private int mGPSStableTimes = 0;
 
     /**
      * For App notification
@@ -124,7 +122,7 @@ public class StepTrackingService extends Service
      * Contains parameters used by {@link com.google.android.gms.location.FusedLocationProviderClient}.
      */
     private LocationRequest mLocationFastRequest;
-    //private LocationRequest mLocationSlowRequest;
+    private LocationRequest mLocationSlowRequest;
 
     /**
      * Provides access to the Fused Location Provider API.
@@ -141,7 +139,7 @@ public class StepTrackingService extends Service
     /**
      * The current location.
      */
-    private Location mLocation;
+    private Location mCurrentLocation;
     private LatLng mHomeCoordinate = null;
 
 
@@ -176,11 +174,9 @@ public class StepTrackingService extends Service
     //TODO: for database:
     private AppDatabase mDB;
     //private DataRepository mAccRepo;
-    private AccelerometerSample mAccSample;
-    private GyroscopeSample mGyroSample;
+    //private AccelerometerSample mAccSample;
+    //private GyroscopeSample mGyroSample;
     private GPSLocation mGPSLocation;
-    //private List<AccelerometerSample> mAccSamples;
-    private WalkingEvent mWalkingEvent;
     private WalkingSession mWalkingSession;
     private long mWalkingSessionId = -1;
     private int mStepsCount = 0;
@@ -385,16 +381,26 @@ public class StepTrackingService extends Service
      * {@link SecurityException}.
      */
 
-    public boolean requestLocationUpdates() {
-        boolean isSuccess = false;
-        Log.i(TAG, "Requesting location updates");
+    public boolean requestLocationUpdates(boolean fastUpdate) {
+        boolean isSuccess;
+        Log.i(TAG, "Requesting location updates:" + fastUpdate);
         AppUtils.setRequestingLocationUpdates(this, true);
         try {
-            mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
-                    mLocationCallback, Looper.myLooper());
+            mFusedLocationClient.removeLocationUpdates(mLocationCallback);
+            if(fastUpdate) {
+                mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
+                        mLocationCallback, Looper.myLooper());
+                AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
+            }else {
+                mFusedLocationClient.requestLocationUpdates(mLocationSlowRequest,
+                        mLocationCallback, Looper.myLooper());
+                AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
+            }
+
             isSuccess = true;
         } catch (SecurityException unlikely) {
             AppUtils.setRequestingLocationUpdates(this, false);
+            AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
             Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
             isSuccess = false;
         }
@@ -442,7 +448,8 @@ public class StepTrackingService extends Service
         };
         t.start();
         if (registerSensorListener()) {
-            Toast.makeText(this, "Starts session ", Toast.LENGTH_LONG).show();
+            Log.e(TAG, "Start recording");
+            Toast.makeText(this, "Starts session", Toast.LENGTH_LONG).show();
         } else {
             Toast.makeText(this, "some sensor not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
@@ -452,7 +459,7 @@ public class StepTrackingService extends Service
     public void requestNewWalkingSession() {
         Log.i(TAG, "Requesting new walking session");
         AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
-        if(requestLocationUpdates()){
+        if(requestLocationUpdates(true)){
             mSessionStarted = true;
             startRecording();
 /*
@@ -558,6 +565,7 @@ public class StepTrackingService extends Service
         try {
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
             AppUtils.setRequestingLocationUpdates(this, false);
+            AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
             isSuccess = true;
         } catch (SecurityException unlikely) {
             AppUtils.setRequestingLocationUpdates(this, true);
@@ -591,6 +599,7 @@ public class StepTrackingService extends Service
         mSensorManager.unregisterListener(this); //unregiester motion sensors
         //Never stop step counter sensor listening
         mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+        Log.e(TAG, "Stop recording.");
     }
 
     public void manualEndWalkingSession(String inputTag) {
@@ -689,16 +698,13 @@ public class StepTrackingService extends Service
         Log.w(TAG, "getting last location from onCreate");
         try {
             mFusedLocationClient.getLastLocation()
-                    .addOnCompleteListener(new OnCompleteListener<Location>() {
-                        @Override
-                        public void onComplete(@NonNull Task<Location> task) {
-                            if (task.isSuccessful() && task.getResult() != null) {
-                                mLocation = task.getResult();
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful() && task.getResult() != null) {
+                            mCurrentLocation = task.getResult();
 
-                                //Log.w(TAG, "The inital location: " + mLocation);
-                            } else {
-                                Log.w(TAG, "Failed to get location.");
-                            }
+                            //Log.w(TAG, "The inital location: " + mCurrentLocation);
+                        } else {
+                            Log.w(TAG, "Failed to get location.");
                         }
                     });
         } catch (SecurityException unlikely) {
@@ -709,7 +715,24 @@ public class StepTrackingService extends Service
     private void onNewLocation(Location location) {
         Log.i(TAG, "New location: " + location);
 
-        mLocation = location;
+        mCurrentLocation = location;
+        if (location.hasSpeed()) {
+            float speed = location.getSpeed();
+            if(speed == 0) {
+                mGPSLostTimes++;
+                mGPSStableTimes = 0;
+            }
+            else {
+                mGPSLostTimes = 0;
+            }
+            if (location.getAccuracy() < 20) //TODO: define GPS accuracy radius
+                mGPSStableTimes++;
+
+        }else {
+            mGPSLostTimes++;
+            mGPSStableTimes = 0;
+        }
+
         autoSessionManagement();//check if should start automatically;
 
         if (mSessionStarted && mWalkingSessionId != -1 ) {
@@ -721,7 +744,6 @@ public class StepTrackingService extends Service
             mGPSLocation.accuracy = location.getAccuracy();
             if (location.hasSpeed()){
                 mGPSLocation.speed = location.getSpeed();
-                //mGPSLocation.speedAccuracy = location.getSpeedAccuracyMetersPerSecond() // > Android v26
             }else {
                 mGPSLocation.speed = -1;
             }
@@ -730,14 +752,15 @@ public class StepTrackingService extends Service
             }else {
                 mGPSLocation.bearing = -1;
             }
+
+            Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
+            Log.i(TAG,"GPS stable time:" + mGPSStableTimes);
+
             mGPSLocation.isWalking = mIsWalking;
             mGPSLocation.session_id = mWalkingSessionId;
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    mDB.locationDao().insert(mGPSLocation);
-                    Log.w(TAG, "write GPS");
-                }
+            new Thread(() -> {
+                mDB.locationDao().insert(mGPSLocation);
+                Log.w(TAG, "write GPS");
             }).start();
         }
 //        // Notify anyone listening for broadcasts about the new location.
@@ -746,12 +769,9 @@ public class StepTrackingService extends Service
 //        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
 
         //TODO-NOTE: not location Update notification content if running as a foreground service.
-//        if (serviceIsRunningInForeground(this)) {
+//        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
 //            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
 //        }
-        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
-            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
-        }
 
     }
 
@@ -759,15 +779,15 @@ public class StepTrackingService extends Service
      * TODO-NOTE: Sets the location request parameters.update interval and accuracy
      */
     private void initLocationRequest() {
-//        mLocationSlowRequest = new LocationRequest();
-//        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS);
-//        mLocationSlowRequest.setFastestInterval(UPDATE_INTERVAL_IN_MILLISECONDS);
-//        mLocationSlowRequest.setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
+        mLocationSlowRequest = new LocationRequest();
+        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS * 1) //TODO: for fast testing;
+                .setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY); //indoor in 1 minute (60s)
 
         mLocationFastRequest = new LocationRequest();
-        mLocationFastRequest.setInterval(AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS);
-        mLocationFastRequest.setFastestInterval(AppConstants.FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS);
-        mLocationFastRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        mLocationFastRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS)
+                .setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
     @Override
@@ -805,13 +825,13 @@ public class StepTrackingService extends Service
             ////This can't be set below 10ms due to Android/hardware limitations. Use 9 to get more accurate 10ms intervals
             if ((curTime - lastUpdate) >= 10 * MILLI2NANO) {
                 lastUpdate = curTime;
-                if(mLocation != null && (mLocation.getElapsedRealtimeNanos()/SECOND2NANO) == (curTime/SECOND2NANO)){//only log when there is location
+                if(mCurrentLocation != null && (mCurrentLocation.getElapsedRealtimeNanos()/SECOND2NANO) == (curTime/SECOND2NANO)){//only log when there is location
                     dataLine = curTime + "," +
                             accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
                             gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
                             magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," +
-                            mLocation.getLatitude() + "," + mLocation.getLongitude() + "," +
-                            mLocation.getAccuracy() + "," + mLocation.getSpeed() + "\n";
+                            mCurrentLocation.getLatitude() + "," + mCurrentLocation.getLongitude() + "," +
+                            mCurrentLocation.getAccuracy() + "," + mCurrentLocation.getSpeed() + "\n";
                 }else {
                     dataLine = curTime + "," +
                             accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
@@ -839,6 +859,9 @@ public class StepTrackingService extends Service
             if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
                 mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
             }
+            //status will be checked whenever there are steps increasing, so even when the session stopped
+            // at indoor walking and the elder start to go out again walking, new session can be activated.
+            autoSessionManagement();
         }
 
     }
@@ -949,7 +972,8 @@ public class StepTrackingService extends Service
                 ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
                 if (result != null) {
                     for (ActivityTransitionEvent event : result.getTransitionEvents()) {
-                        mWalkingEvent = new WalkingEvent();
+                        //private List<AccelerometerSample> mAccSamples;
+                        WalkingEvent mWalkingEvent = new WalkingEvent();
                         mWalkingEvent.WeTimestamp = SystemClock.elapsedRealtimeNanos();//System.currentTimeMillis();
                         mWalkingEvent.mTransition = event.getTransitionType();
                         mWalkingEvent.mElapsedTime = event.getElapsedRealTimeNanos();
@@ -1025,43 +1049,56 @@ public class StepTrackingService extends Service
     }
 
     private void autoSessionManagement(){
-//        if(AppUtils.getKeyMandualMode(self)) {
-//            return;
-        //Log.e(TAG, "Manual Mode:" + mManualMode);
         if(!mManualMode) {
             boolean autostart = false;
-            boolean autostop = false;
-            //Log.e(TAG, "Strats walking: " + mIsWalking);
-            //Log.e(TAG,"Location requesting: " + AppUtils.requestingLocationUpdates(self));
-            if (mIsWalking && !AppUtils.requestingLocationUpdates(self)) {
-                requestLocationUpdates();
+            if(mIsWalking){
+                Log.e(TAG, "Is walking");
+                Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
+                Log.i(TAG,"GPS stable time:" + mGPSStableTimes);
+                if(!AppUtils.requestingLocationUpdates(self)) {
+                    getLastLocation();
+                    requestLocationUpdates(false); //slow update
+                }
+                //TODO: 30 seconds or more to start walking?
+                if ((mCurrentLocation != null) &&
+                        (mCurrentLocation.getElapsedRealtimeNanos() >= mTransitionEnterTime) &&
+                        mGPSLostTimes < 3 && mGPSStableTimes > 2 &&                       //if no GPS signal, it should stop
+                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2NANO &&     //real start walking since last stopped
+                        ((SystemClock.elapsedRealtimeNanos() - mTransitionEnterTime) > (MINUTE2NANO / 2))) {
+                    autostart = true;
+                }
             }
-            if(mLocation != null && mLocation.getElapsedRealtimeNanos() >= mTransitionEnterTime &&
-                    mLocation.hasSpeed() &&
-                    mTransitionEnterTime > mTransitionExitTime &&
-                    //TODO: 30 seconds or more to start walking?
-                    (SystemClock.elapsedRealtimeNanos() -  mTransitionEnterTime) > MINUTE2NANO/2){
-                autostart = true;
-                Log.e(TAG, "auto start session");
-            }
-            if(!mIsWalking &&
-                    mTransitionExitTime > mTransitionEnterTime &&
-                    (SystemClock.elapsedRealtimeNanos() - mTransitionExitTime) > MINUTE2NANO/2){
-                autostop = true;
-                Log.e(TAG, "auto stop session");
+            else{
+                Log.e(TAG, "Is not walking");
+                if(mTransitionEnterTime > 0 && mTransitionExitTime > 0 &&
+                        ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2NANO ||
+                        (SystemClock.elapsedRealtimeNanos() - mTransitionExitTime) < MINUTE2NANO/2)  &&
+                        mGPSLostTimes < 3 && mGPSStableTimes > 2 ){
+                    autostart = true; //do not stop session if it is not a real stop
+                }
             }
 
-            if(!mSessionStarted && autostart && !autostop){
-                startRecording();
-                mSessionStarted = true;
-            }
-            if(!autostart && autostop){
-                if (mSessionStarted) {
-                    mSessionStarted = false;
-                    stopRecording("auto");
+            if(autostart){
+                Log.e(TAG, "auto running session");
+                if (!mSessionStarted){
+                    requestLocationUpdates(true);
+                    startRecording();
+                    mSessionStarted = true;
                 }
-                if(AppUtils.requestingLocationUpdates(self)) {
-                    removeLocationUpdates();
+            }else{
+                Log.e(TAG, "auto stop session");
+                if (mSessionStarted) {
+                    stopRecording("auto");
+                    mSessionStarted = false;
+                }
+                if(mIsWalking){
+                    if(AppUtils.requestingLocationUpdatesFast(self))
+                        //make sure whenever there is walking session, location is watched
+                        requestLocationUpdates(false);
+                } else {
+                    if(AppUtils.requestingLocationUpdates(self)) {
+                        removeLocationUpdates();
+                    }
                 }
             }
         }
