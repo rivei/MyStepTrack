@@ -8,11 +8,15 @@ import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.ToggleButton;
 
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
@@ -30,7 +34,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     public final static String TAG = StatusFragment.class.getSimpleName();
 
     public final static int ON_START_CLICKED = 1;
-    public final static int ON_PLACE_CLICKED = 2;
+    //public final static int ON_PLACE_CLICKED = 2;
 
     private Context mContext;
 
@@ -40,14 +44,20 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     private static final String ARG_HOME_LAT = "homelat";
     private static final String ARG_HOME_LON = "homelon";
 
+    private static final String ARG_MANUAL_MODE = "manual_mode";
+
     // TODO: Rename and change types of parameters
     private double mHomeLat;
     private double mHomeLon;
 
     private boolean mSessionStarted = false;
-    private int mInteractionType = 0;
+    private boolean mManualMode;// = false;
+    //private int mInteractionType = 0;
 
     private Button bnOnOff;
+    //private Switch switchManual;
+    private ToggleButton switchManual;
+    private TextView tvManualMode;
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
@@ -55,15 +65,31 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             mSessionStarted = AppUtils.startingWalkingSession(mContext);
             setButtonsState();
         }
-
+//        if(s.equals(AppUtils.KEY_MANUAL_MODE)){
+//            setButtonsState();
+//        }
     }
 
     private void setButtonsState() {
+        switchManual.setChecked(mManualMode);
+        if(mManualMode){
+            //switchManual.setTextColor(getResources().getColor(R.color.colorButtonOn));
+            //tvManualMode.setText("Manual Mode is ON");
+            switchManual.setBackgroundDrawable(getResources().getDrawable(R.drawable.ic_manual_on));
+            bnOnOff.setEnabled(true);
+        }else{
+            //switchManual.setTextColor(getResources().getColor(R.color.colorAccent));
+            //tvManualMode.setText("Manual Mode is OFF");
+            switchManual.setBackgroundDrawable(getResources().getDrawable(R.drawable.ic_manual_off));
+            bnOnOff.setEnabled(false);
+        }
+
         if (mSessionStarted) {
             bnOnOff.setText("Stop");
         } else {
             bnOnOff.setText("Start");
         }
+
     }
 
     /**
@@ -114,7 +140,10 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
         super.onSaveInstanceState(outState);
         Bundle args = new Bundle();
         args.putBoolean(ARG_SESSION_STARTED, mSessionStarted);
+        args.putBoolean(ARG_MANUAL_MODE, mManualMode);
         outState.putAll(args);
+
+        //AppUtils.setKeyManualMode(mContext,mManualMode);
     }
 
     @Override
@@ -123,9 +152,11 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
         if (getArguments() != null) {
             mHomeLat = getArguments().getDouble(ARG_HOME_LAT);
             mHomeLon = getArguments().getDouble(ARG_HOME_LON);
+
         }
         if (mContext != null){
             mSessionStarted = AppUtils.startingWalkingSession(mContext);
+            mManualMode = AppUtils.getKeyMandualMode(mContext);
         }
     }
 
@@ -136,7 +167,21 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
         View rootView = inflater.inflate(R.layout.fragment_status, container, false);
 
         TextView tvHome = rootView.findViewById(R.id.tvHome);
+
         tvHome.setText("Home coordinate: "+ mHomeLat + ", " + mHomeLon);
+        //switchManual = rootView.findViewById(R.id.switchManual);
+        tvManualMode = rootView.findViewById(R.id.tvManualMode);
+        switchManual = rootView.findViewById(R.id.switchManual);
+
+        switchManual.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                AppUtils.setKeyManualMode(mContext,isChecked);
+                mManualMode = isChecked;
+                setButtonsState();
+                Log.i(TAG,"switch changed to " + mManualMode);
+            }
+        });
 
         bnOnOff = rootView.findViewById(R.id.btnOnOff);
         bnOnOff.setOnClickListener(new View.OnClickListener() {
@@ -149,6 +194,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
 
         if (savedInstanceState != null){
             mSessionStarted = savedInstanceState.getBoolean(ARG_SESSION_STARTED);
+            mManualMode = savedInstanceState.getBoolean(ARG_MANUAL_MODE);
         }
         setButtonsState();
 

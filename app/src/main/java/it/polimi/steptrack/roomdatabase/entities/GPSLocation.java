@@ -43,7 +43,7 @@ public class GPSLocation {
     public float bearing;
 
     @ColumnInfo
-    public int isWalking;
+    public boolean isWalking;
 
     @Override
     public String toString(){

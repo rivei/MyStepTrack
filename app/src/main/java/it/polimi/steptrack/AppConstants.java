@@ -2,8 +2,14 @@ package it.polimi.steptrack;
 
 import com.google.android.gms.location.DetectedActivity;
 
+import androidx.versionedparcelable.ParcelUtils;
+
 public final class AppConstants {
     public static final String PACKAGE_NAME = "it.polimi.steptrack";
+
+    public static final long MILLI2NANO = 1000000;
+    public static final long SECOND2NANO = 1000 * MILLI2NANO;
+    public static final long MINUTE2NANO = 60 * SECOND2NANO;
 
     /**
      * For StepTrackingService

@@ -204,23 +204,6 @@ public class AppUtils {
         return distance;
     }
 
-//    /*** For step counts ********/
-//
-//    // Should the Step Counting Service be running?
-//    public static boolean shouldServiceRun(Context context) {
-//        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-//        return prefs.getBoolean("serviceRunning", false);
-//    }
-//
-//    // Should the Step Counting Service be running?
-//    public static void setServiceRun(Context context, boolean running) {
-//        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, 0);
-//        SharedPreferences.Editor prefsEditor = prefs.edit();
-//        prefsEditor.putBoolean("serviceRunning", running);
-//        prefsEditor.apply();
-//    }
-
-
     /**
      * For Geofencing
      */
@@ -351,5 +334,21 @@ public class AppUtils {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * For manual mode
+     */
+    public static final String KEY_MANUAL_MODE = "manual_mode";
+    public static boolean getKeyMandualMode(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(KEY_MANUAL_MODE, false);
+    }
+
+    public static void setKeyManualMode(Context context, boolean manualModeOn){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(KEY_MANUAL_MODE, manualModeOn)
+                .apply();
     }
 }

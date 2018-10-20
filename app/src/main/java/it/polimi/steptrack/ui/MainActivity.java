@@ -532,7 +532,7 @@ public class MainActivity extends AppCompatActivity
                     rawDataList.add(session.toString());
                 }
                 String filename = "walkingsession.csv";
-                final String header = "user_Id, session_id, StartTime, EndTime, StepCount, StepDetect, Distance, AverageSpeed, Duration, Tag \n";
+                final String header = "user_Id,session_id,StartTime,EndTime,StartNano,EndNano,StepCount,StepDetect,Distance,AverageSpeed,Duration,Tag\n";
                 AppUtils.writeFile(filename, header, rawDataList);
             }
         };

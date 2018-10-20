@@ -26,8 +26,14 @@ public class WalkingSession {
     @ColumnInfo(name = "start_time")
     public long mStartTime;
 
+    @ColumnInfo(name = "start_nano")
+    public long mStartNano;
+
     @ColumnInfo(name = "end_time")
     public long mEndTime;
+
+    @ColumnInfo(name = "end_nano")
+    public long mEndNano;
 
     @ColumnInfo(name = "step_count")
     public long mStepCount;
@@ -49,15 +55,17 @@ public class WalkingSession {
 
     @Override
     public String toString(){
-        return userId + ", " +
-                sid + ", " +
-                mStartTime + ", " +
-                mEndTime + ", " +
-                mStepCount + ", " +
-                mStepDetect + ", " +
-                mDistance + ", " +
-                mAverageSpeed + ", " +
-                mDuration + ", " +
+        return userId + "," +
+                sid + "," +
+                mStartTime + "," +
+                mEndTime + "," +
+                mStartNano + "," +
+                mEndNano + "," +
+                mStepCount + "," +
+                mStepDetect + "," +
+                mDistance + "," +
+                mAverageSpeed + "," +
+                mDuration + "," +
                 mTag;
     }
 
