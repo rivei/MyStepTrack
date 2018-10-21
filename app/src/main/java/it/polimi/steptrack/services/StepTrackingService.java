@@ -450,6 +450,9 @@ public class StepTrackingService extends Service
         if (registerSensorListener()) {
             Log.e(TAG, "Start recording");
             Toast.makeText(this, "Starts session", Toast.LENGTH_LONG).show();
+            if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND){
+                updateNotification("Recording session");
+            }
         } else {
             Toast.makeText(this, "some sensor not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
@@ -599,6 +602,7 @@ public class StepTrackingService extends Service
         mSensorManager.unregisterListener(this); //unregiester motion sensors
         //Never stop step counter sensor listening
         mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+        mNotificationContentText = "Session not recording";
         Log.e(TAG, "Stop recording.");
     }
 
@@ -720,18 +724,20 @@ public class StepTrackingService extends Service
             float speed = location.getSpeed();
             if(speed == 0) {
                 mGPSLostTimes++;
-                mGPSStableTimes = 0;
+                //if(mGPSStableTimes > 0) mGPSStableTimes--; //do not terminate immediately, no need because lost signal can control?
             }
             else {
                 mGPSLostTimes = 0;
             }
-            if (location.getAccuracy() < 20) //TODO: define GPS accuracy radius
+            if (location.getAccuracy() < 30) //TODO: define GPS accuracy radius
                 mGPSStableTimes++;
 
         }else {
             mGPSLostTimes++;
-            mGPSStableTimes = 0;
+            //if(mGPSStableTimes > 0) mGPSStableTimes--; //do not terminate immediately
         }
+        if(location.getAccuracy() > 50) //TODO: define GPS accuracy radius
+            mGPSLostTimes++;
 
         autoSessionManagement();//check if should start automatically;
 
@@ -780,13 +786,13 @@ public class StepTrackingService extends Service
      */
     private void initLocationRequest() {
         mLocationSlowRequest = new LocationRequest();
-        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS * 1) //TODO: for fast testing;
+        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS * 6) //TODO: for fast testing;
                 .setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY); //indoor in 1 minute (60s)
 
         mLocationFastRequest = new LocationRequest();
         mLocationFastRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS)
-                .setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
+                .setFastestInterval(1) //TODO: update as fast as possible
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
@@ -1062,7 +1068,7 @@ public class StepTrackingService extends Service
                 //TODO: 30 seconds or more to start walking?
                 if ((mCurrentLocation != null) &&
                         (mCurrentLocation.getElapsedRealtimeNanos() >= mTransitionEnterTime) &&
-                        mGPSLostTimes < 3 && mGPSStableTimes > 2 &&                       //if no GPS signal, it should stop
+                        mGPSLostTimes < 4 && mGPSStableTimes > 2 &&                       //if no GPS signal, it should stop
                         (mTransitionEnterTime - mTransitionExitTime) > MINUTE2NANO &&     //real start walking since last stopped
                         ((SystemClock.elapsedRealtimeNanos() - mTransitionEnterTime) > (MINUTE2NANO / 2))) {
                     autostart = true;
@@ -1073,7 +1079,7 @@ public class StepTrackingService extends Service
                 if(mTransitionEnterTime > 0 && mTransitionExitTime > 0 &&
                         ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2NANO ||
                         (SystemClock.elapsedRealtimeNanos() - mTransitionExitTime) < MINUTE2NANO/2)  &&
-                        mGPSLostTimes < 3 && mGPSStableTimes > 2 ){
+                        mGPSLostTimes < 4 && mGPSStableTimes > 2 ){
                     autostart = true; //do not stop session if it is not a real stop
                 }
             }
@@ -1089,6 +1095,7 @@ public class StepTrackingService extends Service
                 Log.e(TAG, "auto stop session");
                 if (mSessionStarted) {
                     stopRecording("auto");
+                    mGPSStableTimes = 0;
                     mSessionStarted = false;
                 }
                 if(mIsWalking){
