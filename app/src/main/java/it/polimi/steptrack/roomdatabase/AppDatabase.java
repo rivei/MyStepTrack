@@ -12,6 +12,7 @@ import android.support.annotation.NonNull;
 
 import it.polimi.steptrack.AppExecutors;
 import it.polimi.steptrack.roomdatabase.dao.AccelerometerSampleDao;
+import it.polimi.steptrack.roomdatabase.dao.DailySummaryDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
 import it.polimi.steptrack.roomdatabase.dao.GeoFencingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.GyroscopeSampleDao;
@@ -19,6 +20,7 @@ import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.UserDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.roomdatabase.entities.DailySummary;
 import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
 import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
@@ -34,7 +36,8 @@ import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
         SensorSample.class,
         AccelerometerSample.class,
         GyroscopeSample.class,
-        WalkingEvent.class},
+        WalkingEvent.class,
+        DailySummary.class},
         version = 1,
         exportSchema = false)
 @TypeConverters(DateConverter.class)
@@ -50,6 +53,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract GyroscopeSampleDao gyroSampleDao();
     public abstract WalkingEventDao walkingEventDao();
     public abstract GeoFencingEventDao geoFencingEventDao();
+    public abstract DailySummaryDao dailySummaryDao();
     private final MutableLiveData<Boolean> mIsDatabaseCreated = new MutableLiveData<>();
 
     public static AppDatabase getInstance(final Context context, final AppExecutors executors) {

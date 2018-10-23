@@ -133,7 +133,26 @@ public class AppUtils {
                 .apply();
     }
 
+    public static final String KEY_LAST_REPORT_TIME = "last_report_time";
+    public static long getLastReportTime(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getLong(KEY_LAST_REPORT_TIME, 0);
+    }
+    public static void setKeyLastReportTime(Context context, long timestamp){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putLong(KEY_LAST_REPORT_TIME, timestamp)
+                .apply();
+    }
 
+//    public static boolean timeToGenReport(long curTime){
+//        Calendar c = Calendar.getInstance();
+//        c.setTimeInMillis(curTime);
+//
+//        //mHour = c.get(Calendar.HOUR);
+//        //mMinute = c.get(Calendar.MINUTE);
+//        return true;
+//    }
 
 
     /**
@@ -277,16 +296,6 @@ public class AppUtils {
         c.set(Calendar.SECOND, 1);
         c.set(Calendar.MILLISECOND, 0);
         c.add(Calendar.DATE, 1); //oneDay after
-        return c.getTimeInMillis();
-    }
-
-    public static long getToday(){
-        Calendar c = Calendar.getInstance();
-        c.setTimeInMillis(System.currentTimeMillis());
-        c.set(Calendar.HOUR_OF_DAY,0);
-        c.set(Calendar.MINUTE, 0);
-        c.set(Calendar.SECOND, 1);
-        c.set(Calendar.MILLISECOND, 0);
         return c.getTimeInMillis();
     }
 

@@ -5,6 +5,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.arch.lifecycle.LifecycleOwner;
+import android.arch.lifecycle.Observer;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -27,6 +29,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Log;
@@ -61,11 +64,13 @@ import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
+import it.polimi.steptrack.roomdatabase.entities.DailySummary;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
+import static it.polimi.steptrack.AppConstants.BATCH_LATENCY_5s;
 import static it.polimi.steptrack.AppConstants.FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS;
 import static it.polimi.steptrack.AppConstants.MILLI2NANO;
 import static it.polimi.steptrack.AppConstants.MINUTE2NANO;
@@ -230,7 +235,7 @@ public class StepTrackingService extends Service
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY_5s);
         } else {
             Toast.makeText(this, "Step count sensor missing. Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
@@ -455,7 +460,7 @@ public class StepTrackingService extends Service
             }
         } else {
             Toast.makeText(this, "some sensor not Compatible!", Toast.LENGTH_LONG).show();
-            this.stopSelf();
+            //this.stopSelf();
         }
     }
 
@@ -601,7 +606,7 @@ public class StepTrackingService extends Service
         }
         mSensorManager.unregisterListener(this); //unregiester motion sensors
         //Never stop step counter sensor listening
-        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY_5s);
         mNotificationContentText = "Session not recording";
         Log.e(TAG, "Stop recording.");
     }
@@ -746,7 +751,7 @@ public class StepTrackingService extends Service
             mGPSLocation.GTimestamp = location.getElapsedRealtimeNanos();//location.getTime();
             mGPSLocation.latitude = location.getLatitude();
             mGPSLocation.longitude = location.getLongitude();
-            mGPSLocation.provider = location.getProvider();
+//            mGPSLocation.provider = location.getProvider();
             mGPSLocation.accuracy = location.getAccuracy();
             if (location.hasSpeed()){
                 mGPSLocation.speed = location.getSpeed();
@@ -786,12 +791,12 @@ public class StepTrackingService extends Service
      */
     private void initLocationRequest() {
         mLocationSlowRequest = new LocationRequest();
-        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS * 6) //TODO: for fast testing;
+        mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS * 3) //TODO: for fast testing;
                 .setFastestInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY); //indoor in 1 minute (60s)
 
         mLocationFastRequest = new LocationRequest();
-        mLocationFastRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS)
+        mLocationFastRequest.setInterval(FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS)
                 .setFastestInterval(1) //TODO: update as fast as possible
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
@@ -868,6 +873,13 @@ public class StepTrackingService extends Service
             //status will be checked whenever there are steps increasing, so even when the session stopped
             // at indoor walking and the elder start to go out again walking, new session can be activated.
             autoSessionManagement();
+
+//            mDB.dailySummaryDao().getLastReportTime().observe((LifecycleOwner) self, new Observer<DailySummary>() {
+//                @Override
+//                public void onChanged(@Nullable DailySummary dailySummary) {
+//
+//                }
+//            });
         }
 
     }
@@ -1110,4 +1122,6 @@ public class StepTrackingService extends Service
             }
         }
     }
+
+
 }

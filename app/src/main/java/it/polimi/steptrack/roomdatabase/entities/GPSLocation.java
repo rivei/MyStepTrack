@@ -27,8 +27,8 @@ public class GPSLocation {
     @ColumnInfo
     public double longitude;
 
-    @ColumnInfo
-    public String provider;
+//    @ColumnInfo
+//    public String provider;
 
     @ColumnInfo
     public float accuracy;
@@ -51,7 +51,7 @@ public class GPSLocation {
                 GTimestamp + ", " +
                 latitude + ", " +
                 longitude + "," +
-                provider + "," +
+//                provider + "," +
                 accuracy + "," +
                 speed + "," +
                 bearing + "," +
