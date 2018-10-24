@@ -19,12 +19,37 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Pick place"/>
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="10sp" />
+
+        <TextView
+            android:id="@+id/tvSampling"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Current sensor sampling rate:"/>
+        <Button
+            android:id="@+id/btnSampling"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Set sampling rate"/>
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="10sp" />
+
+        <Button
+            android:id="@+id/btnDummy"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="dummy data"/>
 
         <Button
             android:id="@+id/btnExport"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Export Data"/>
+
 
     </LinearLayout>
 

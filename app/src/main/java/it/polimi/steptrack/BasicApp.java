@@ -6,16 +6,16 @@ import it.polimi.steptrack.roomdatabase.AppDatabase;
 
 public class BasicApp extends Application { //TODO: from BasicSample
 
-    private AppExecutors mAppExecutors;
+    //private AppExecutors mAppExecutors;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        mAppExecutors = new AppExecutors();
+        //mAppExecutors = new AppExecutors();
     }
 
     public AppDatabase getDatabase() {
-        return AppDatabase.getInstance(this, mAppExecutors);
+        return AppDatabase.getInstance(this);//, mAppExecutors);
     }
 
     public DataRepository getRepository() {

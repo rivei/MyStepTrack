@@ -29,4 +29,25 @@ public interface WalkingSessionDao {
 
     @Query("SELECT * from sessions WHERE sid == :SessionId")
     LiveData<WalkingSession> getSession(int SessionId);
+//
+//    //get all session id from one day
+//    @Query("SELECT sid FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
+//    List<Long> getSessionsID(long startTime, long endTime);
+
+    //total duration for one day
+    @Query("SELECT SUM(duration) FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
+    long getSumDuration(long startTime, long endTime);
+
+    //total step count for one day
+    @Query("SELECT SUM(step_detect) FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
+    long getSumStepDetect(long startTime, long endTime);
+
+    @Query("SELECT SUM(distance) FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
+    float getSumDistance(long startTime, long endTime);
+
+    @Query("SELECT AVG(average_speed) FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
+    float getAvgSpeed(long startTime, long endTime);
+//    @Query("SELECT SUM(stepCount) as total, AVG(stepCount) as average FROM userFitnessDailyRecords
+// where forDay BETWEEN :startDay AND :endDay ORDER BY forDay ASC")
+//    SumAveragePojo getUserFitnessSumAndAverageForLastThirtyDays(Date startDay, Date endDay);
 }

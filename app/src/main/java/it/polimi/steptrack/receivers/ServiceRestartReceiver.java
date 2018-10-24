@@ -29,5 +29,7 @@ public class ServiceRestartReceiver extends BroadcastReceiver {
             context.startService(new Intent(context, StepTrackingService.class));
             //context.startActivity(new Intent(context, MainActivity.class));
         }
+
+        AppUtils.removeKeyPhoneReboot(context);
     }
 }

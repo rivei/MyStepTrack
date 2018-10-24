@@ -1,15 +1,21 @@
 package it.polimi.steptrack.ui;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.TextView;
 
+import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
+
+import static it.polimi.steptrack.AppUtils.KEY_SAMPLING_FREQUENCY;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -19,11 +25,14 @@ import it.polimi.steptrack.R;
  * Use the {@link SettingFragment#newInstance} factory method to
  * create an instance of this fragment.
  */
-public class SettingFragment extends Fragment {
+public class SettingFragment extends Fragment
+implements SharedPreferences.OnSharedPreferenceChangeListener {
     public final static String TAG = SettingFragment.class.getSimpleName();
 
     public final static int ON_EXPORT_CLICKED = 1;
     public final static int ON_PLACE_CLICKED = 2;
+    public final static int ON_SAMPLING_CLICKED = 3;
+    public final static int ON_DUMMY_CLICKED = 4;
 
     private Context mContext;
 
@@ -35,6 +44,21 @@ public class SettingFragment extends Fragment {
     // TODO: Rename and change types of parameters
     private String mParam1;
     private String mParam2;
+
+    private TextView tvSampling;
+
+    @Override
+    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
+        if(key.equals(KEY_SAMPLING_FREQUENCY)){
+            long freq = AppUtils.getSamplingFrequency(mContext);
+            if(freq == 0){
+                tvSampling.setText("Current sensor sampling rate: 100 Hz");
+            }
+            else {
+                tvSampling.setText("Current sensor sampling rate: " + freq + "Hz");
+            }
+        }
+    }
 
     /**
      * This interface must be implemented by activities that contain this
@@ -55,6 +79,7 @@ public class SettingFragment extends Fragment {
 
     public SettingFragment() {
         // Required empty public constructor
+
     }
 
     /**
@@ -90,8 +115,19 @@ public class SettingFragment extends Fragment {
         // Inflate the layout for this fragment
         View rootView =  inflater.inflate(R.layout.fragment_setting, container, false);
 
+        tvSampling = rootView.findViewById(R.id.tvSampling);
+        long freq = AppUtils.getSamplingFrequency(mContext);
+        if(freq == 0){
+            tvSampling.setText("Current sensor sampling rate: 50 Hz");
+        }
+        else {
+            tvSampling.setText("Current sensor sampling rate: " + freq + "Hz");
+        }
+
         Button bnPickHome = rootView.findViewById(R.id.btnPickHome);
         Button bnExport = rootView.findViewById(R.id.btnExport);
+        Button bnSampling = rootView.findViewById(R.id.btnSampling);
+        Button bnDummy = rootView.findViewById(R.id.btnDummy);
 
         bnPickHome.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -104,6 +140,20 @@ public class SettingFragment extends Fragment {
             @Override
             public void onClick(View view) {
                 mListener.onSettingFragmentInteraction(ON_EXPORT_CLICKED);
+            }
+        });
+
+        bnSampling.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mListener.onSettingFragmentInteraction(ON_SAMPLING_CLICKED);
+            }
+        });
+
+        bnDummy.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mListener.onSettingFragmentInteraction(ON_DUMMY_CLICKED);
             }
         });
         return rootView;
@@ -128,5 +178,18 @@ public class SettingFragment extends Fragment {
         mListener = null;
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        PreferenceManager.getDefaultSharedPreferences(mContext)
+                .registerOnSharedPreferenceChangeListener(this);
+    }
+
+    @Override
+    public void onPause() {
+        PreferenceManager.getDefaultSharedPreferences(mContext)
+                .unregisterOnSharedPreferenceChangeListener(this);
+        super.onPause();
+    }
 
 }

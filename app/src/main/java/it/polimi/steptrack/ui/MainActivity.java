@@ -9,6 +9,7 @@ import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
@@ -19,6 +20,8 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.RecyclerView;
+import android.text.InputType;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -31,6 +34,7 @@ import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
@@ -39,7 +43,10 @@ import com.google.android.gms.location.places.Place;
 import com.google.android.gms.location.places.ui.PlacePicker;
 import com.google.android.gms.maps.model.LatLng;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import it.polimi.steptrack.AppUtils;
@@ -47,7 +54,12 @@ import it.polimi.steptrack.BuildConfig;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.receivers.ServiceRestartReceiver;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
+import it.polimi.steptrack.roomdatabase.dao.DailySummaryDao;
+import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
+import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
+import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
+import it.polimi.steptrack.roomdatabase.entities.DailySummary;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
 import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
@@ -196,6 +208,7 @@ public class MainActivity extends AppCompatActivity
             FragmentManager fragmentManager = getSupportFragmentManager();
             fragmentManager.beginTransaction()
                     .replace(R.id.fragment_container, fragment)
+                    .addToBackStack(null)
                     .commit();
 
         } else if (id == R.id.nav_gallery) {
@@ -204,6 +217,7 @@ public class MainActivity extends AppCompatActivity
             FragmentManager fragmentManager = getSupportFragmentManager();
             fragmentManager.beginTransaction()
                     .replace(R.id.fragment_container, fragment)
+                    .addToBackStack(null)
                     .commit();
 
         } else if (id == R.id.nav_slideshow) {
@@ -214,12 +228,18 @@ public class MainActivity extends AppCompatActivity
 //            Log.w(TAG,"FINISHED??");
             ExportData();
         } else if (id == R.id.nav_manage) {
-//            WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
-//            getSupportFragmentManager().beginTransaction()
-//                    .replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG)
-//                    .commit();
+            WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG)
+                    .addToBackStack(null)
+                    .commit();
 
         } else if (id == R.id.nav_share) {
+            ReportFragment reportFragment = new ReportFragment();
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_container, reportFragment, ReportFragment.TAG)
+                    .addToBackStack(null)
+                    .commit();
 
         } else if (id == R.id.nav_send) {
 
@@ -270,7 +290,9 @@ public class MainActivity extends AppCompatActivity
             fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
             FragmentManager fragmentManager = getSupportFragmentManager();
             fragmentManager.beginTransaction()
-                    .add(R.id.fragment_container, fragment, StatusFragment.TAG)
+                    //.add(R.id.fragment_container, fragment, StatusFragment.TAG)
+                    .replace(R.id.fragment_container, fragment, StatusFragment.TAG)
+                    .addToBackStack(null)
                     .commit();
         }
     }
@@ -550,6 +572,19 @@ public class MainActivity extends AppCompatActivity
 //            }
 //        };
 //        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (DailySummary report : mDB.dailySummaryDao().getAllSummariesSynchronous()) {
+                    rawDataList.add(report.toString());
+                }
+                String filename = "reports.csv";
+                final String header = "user_Id,date_id,Date,number_Sessions,walking_duration,distance,speed,steps_count,step_Detect,reportTime\n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
     }
 
     @Override
@@ -560,6 +595,7 @@ public class MainActivity extends AppCompatActivity
                     if (! AppUtils.startingWalkingSession(self)){
                         mService.requestNewWalkingSession();
                     }else {
+                        mService.manualEndWalkingSession();
                         /**
                          * Pop up dialog for walking session Tag
                          */
@@ -567,6 +603,8 @@ public class MainActivity extends AppCompatActivity
                         View setTagView = LayoutInflater.from(self).inflate(R.layout.dialog_input_tag, null);
                         AlertDialog.Builder setTagDialogBuilder = new AlertDialog.Builder(self);
                         setTagDialogBuilder.setView(setTagView);
+                        TextView tvHint = setTagView.findViewById(R.id.inputHint);
+                        tvHint.setText("Input Tag for this session: ");
                         EditText editTag = (EditText) setTagView.findViewById(R.id.editTag);
                         setTagDialogBuilder.setCancelable(false)
                                 .setPositiveButton("Save",
@@ -575,17 +613,20 @@ public class MainActivity extends AppCompatActivity
                                             public void onClick(DialogInterface dialog, int which) {
                                                 String textTag = editTag.getText().toString();
                                                 //send this value to Service.
-                                                mService.manualEndWalkingSession(textTag);
+                                                mService.updateSessionTag(textTag);
                                                 //TODO: this should be done after the task finished (wait for result?)
                                                 Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
+                                                AppUtils.setKeyManualMode(self,false);
                                             }
                                         })
                                 .setNegativeButton("Cancel",
                                         new DialogInterface.OnClickListener() {
                                             @Override
                                             public void onClick(DialogInterface dialog, int which) {
+                                                //send this value to Service.
+                                                mService.updateSessionTag("dumped");
                                                 dialog.cancel();
-                                                Toast.makeText(self, "Session not stopped", Toast.LENGTH_SHORT).show();
+                                                Toast.makeText(self, "Session not Saved", Toast.LENGTH_SHORT).show();
                                             }
                                         });
                         AlertDialog setTagDialog = setTagDialogBuilder.create();
@@ -624,9 +665,89 @@ public class MainActivity extends AppCompatActivity
 //                    Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
 //                }
                 break;
+            case SettingFragment.ON_SAMPLING_CLICKED:
+                View setTagView = LayoutInflater.from(self).inflate(R.layout.dialog_input_tag, null);
+                AlertDialog.Builder setTagDialogBuilder = new AlertDialog.Builder(self);
+                setTagDialogBuilder.setView(setTagView);
+                TextView tvHint = setTagView.findViewById(R.id.inputHint);
+                tvHint.setText("Set sensor sampling frequency in Hz: ");
+                EditText editTag = setTagView.findViewById(R.id.editTag);
+                editTag.setInputType(InputType.TYPE_CLASS_NUMBER);
+                setTagDialogBuilder.setCancelable(false)
+                        .setPositiveButton("Confirm",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        String textTag = editTag.getText().toString();
+                                        AppUtils.setKeySamplingFrequency(self, Integer.parseInt(textTag));
+                                        //Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
+                                    }
+                                })
+                        .setNegativeButton("Cancel",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        dialog.cancel();
+                                        //Toast.makeText(self, "Session not stopped", Toast.LENGTH_SHORT).show();
+                                    }
+                                });
+                AlertDialog setTagDialog = setTagDialogBuilder.create();
+                setTagDialog.show();
+
+                break;
             case SettingFragment.ON_EXPORT_CLICKED:
                 ExportData();
                 break;
+
+            case SettingFragment.ON_DUMMY_CLICKED:
+                new dummyDataAsyncTask(AppDatabase.getInstance(self)).execute();
+                break;
+        }
+    }
+
+    private static class dummyDataAsyncTask extends AsyncTask<Void, Void, Void> {
+
+        private final DailySummaryDao reportDao;
+        private final GPSLocationDao locationDao;
+        private final WalkingSessionDao sessionDao;
+        private final WalkingEventDao eventDao;
+
+        dummyDataAsyncTask(AppDatabase db) {
+            reportDao = db.dailySummaryDao();
+            locationDao = db.locationDao();
+            sessionDao = db.sessionDao();
+            eventDao = db.walkingEventDao();
+        }
+
+        @Override
+        protected Void doInBackground(Void... params) {
+            reportDao.deleteAll();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy");
+            //String strDate = "20/10/2018 00:00:00";
+            Date date = null;
+            try {
+                date = dateFormat.parse("20/10/2018");
+            } catch (ParseException e) {
+                e.printStackTrace();
+            }
+
+            DailySummary dailySummary = new DailySummary(0,date,90000,
+                    400,700,1000,1.4f,700,0);
+            reportDao.insert(dailySummary);
+
+            return null;
+        }
+
+        /**
+         * `onPostExecute` is run after `doInBackground`, and it's
+         * run on the main/ui thread, so you it's safe to update ui
+         * components from it. (this is the correct way to update ui
+         * components.)
+         */
+        @Override
+        protected void onPostExecute(Void param) {
+            //cleanupUiAfterCancelOrDelete();
+            //galleryItemAdapter.notifyDataSetChanged();
         }
     }
 }

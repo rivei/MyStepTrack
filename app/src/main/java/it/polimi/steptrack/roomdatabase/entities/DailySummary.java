@@ -33,13 +33,34 @@ public class DailySummary {
     public long walkingduration;
 
     @ColumnInfo
-    public int distance;
+    public float distance;
 
     @ColumnInfo
     public int steps;
 
     @ColumnInfo
+    public float speed;
+
+    @ColumnInfo
+    public long stepDetect;
+
+    @ColumnInfo
     public long reportTime;
+
+    public DailySummary(){}
+
+    public DailySummary(int userId, Date mDate, int numWalkingSessions, long walkingduration,
+                        float distance, int steps, float speed, long stepDetect, long reportTime) {
+        this.userId = userId;
+        this.mDate = mDate;
+        this.numWalkingSessions = numWalkingSessions;
+        this.walkingduration = walkingduration;
+        this.distance = distance;
+        this.steps = steps;
+        this.speed = speed;
+        this.stepDetect = stepDetect;
+        this.reportTime = reportTime;
+    }
 
     @Override
     public String toString(){
@@ -49,7 +70,9 @@ public class DailySummary {
                 numWalkingSessions + "," +
                 walkingduration + "," +
                 distance + "," +
+                speed + "," +
                 steps + "," +
+                stepDetect + "," +
                 reportTime;
     }
 }

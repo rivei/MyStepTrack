@@ -24,11 +24,11 @@ public final class AppConstants {
      * For Locations
      */
     // The desired interval for location updates. Inexact. Updates may be more or less frequent.
-    public static final long UPDATE_INTERVAL_IN_MILLISECONDS = 5000; //5s
+    public static final long UPDATE_INTERVAL_IN_MILLISECONDS = 20000; //20s
     //The fastest rate for active location updates. Updates will never be more frequent than this value.
-    public static final long FASTEST_UPDATE_INTERVAL_IN_MILLISECONDS =
-            UPDATE_INTERVAL_IN_MILLISECONDS / 2; //5s
-
+    public static final long FAST_UPDATE_INTERVAL_IN_MILLISECONDS = 2000; //2s
+//            UPDATE_INTERVAL_IN_MILLISECONDS / 2; //5s
+    public static final float GPS_ACCEPTABLE_ACCURACY = 25f;  //TODO: define GPS accuracy radius
 
     /**
      * For stepcount sensors

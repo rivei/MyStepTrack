@@ -42,7 +42,7 @@ public class WalkingSession {
     public long mStepDetect;
 
     @ColumnInfo(name = "distance")
-    public long mDistance;
+    public float mDistance;
 
     @ColumnInfo(name = "average_speed")
     public double mAverageSpeed;

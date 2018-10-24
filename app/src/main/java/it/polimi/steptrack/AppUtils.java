@@ -89,6 +89,12 @@ public class AppUtils {
                 .putBoolean(KEY_PHONE_REBOOT,phoneReboot)
                 .apply();
     }
+    public static void removeKeyPhoneReboot(Context context){
+        if(PreferenceManager.getDefaultSharedPreferences(context).contains(KEY_PHONE_REBOOT)) {
+            PreferenceManager.getDefaultSharedPreferences(context)
+                    .edit().remove(KEY_PHONE_REBOOT).apply();
+        }
+    }
 
 
     public static final String KEY_STARTING_WALKING_SESSION = "starting_walking_session";
@@ -142,6 +148,18 @@ public class AppUtils {
         PreferenceManager.getDefaultSharedPreferences(context)
                 .edit()
                 .putLong(KEY_LAST_REPORT_TIME, timestamp)
+                .apply();
+    }
+
+    public static final String KEY_SAMPLING_FREQUENCY = "sampling_frequency";
+    public static long getSamplingFrequency(Context context){
+        return  PreferenceManager.getDefaultSharedPreferences(context)
+                .getLong(KEY_SAMPLING_FREQUENCY,0);
+    }
+    public static void setKeySamplingFrequency(Context context, long freq){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putLong(KEY_SAMPLING_FREQUENCY, freq)
                 .apply();
     }
 
@@ -288,6 +306,18 @@ public class AppUtils {
     /** TODO organized in a better way
      * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone
      */
+    public static boolean isYesterday(long timestamp){
+        Calendar c = Calendar.getInstance();
+        Calendar today = Calendar.getInstance();
+        c.setTimeInMillis(timestamp);
+        today.setTimeInMillis(System.currentTimeMillis());
+        if(c.get(Calendar.DATE) == (today.get(Calendar.DATE) - 1)) {
+            return true;
+        }else{
+            return false;
+        }
+
+    }
     public static long getTomorrow() {
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(System.currentTimeMillis());

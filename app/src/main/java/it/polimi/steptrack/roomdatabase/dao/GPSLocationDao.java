@@ -26,4 +26,10 @@ public interface GPSLocationDao
 
     @Query("SELECT * from locations ORDER BY session_id ASC")
     List<GPSLocation> getAllLocationSynchronous();
+
+    @Query("SELECT * from locations WHERE session_id = :sid ORDER BY GTimestamp ASC")
+    List<GPSLocation> getSessionLocations(long sid);
+
+    @Query("SELECT AVG(speed) FROM locations WHERE session_id = :sid AND speed > 0 ORDER BY GTimestamp ASC")
+    float getSessionSpeed(long sid);
 }

@@ -65,9 +65,10 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             mSessionStarted = AppUtils.startingWalkingSession(mContext);
             setButtonsState();
         }
-//        if(s.equals(AppUtils.KEY_MANUAL_MODE)){
-//            setButtonsState();
-//        }
+        if(s.equals(AppUtils.KEY_MANUAL_MODE)){
+            mManualMode = AppUtils.getKeyMandualMode(mContext);
+            setButtonsState();
+        }
     }
 
     private void setButtonsState() {
@@ -88,6 +89,10 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             bnOnOff.setText("Stop");
         } else {
             bnOnOff.setText("Start");
+//            switchManual.setChecked(false);
+//            mManualMode = false;
+//            AppUtils.setKeyManualMode(mContext, mManualMode);
+//            bnOnOff.setEnabled(false);
         }
 
     }

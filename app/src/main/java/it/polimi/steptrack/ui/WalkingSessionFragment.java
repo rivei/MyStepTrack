@@ -13,6 +13,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import it.polimi.steptrack.R;
@@ -71,16 +72,18 @@ public class WalkingSessionFragment extends Fragment {
         mContext = rootView.getContext();
 
         // Set the adapter
-        if (rootView instanceof RecyclerView) {
+//        if (rootView instanceof RecyclerView) {
             Context context = rootView.getContext();
-            RecyclerView recyclerView = (RecyclerView) rootView;
-            if (mColumnCount <= 1) {
-                recyclerView.setLayoutManager(new LinearLayoutManager(context));
-            } else {
-                recyclerView.setLayoutManager(new GridLayoutManager(context, mColumnCount));
-            }
+//            RecyclerView recyclerView = (RecyclerView) rootView;
+//            if (mColumnCount <= 1) {
+//                recyclerView.setLayoutManager(new LinearLayoutManager(context));
+//            } else {
+//                recyclerView.setLayoutManager(new GridLayoutManager(context, mColumnCount));
+//            }
 
-            final WalkingSessionRecyclerViewAdapter adapter = new WalkingSessionRecyclerViewAdapter(mContext);
+            RecyclerView recyclerView = rootView.findViewById(R.id.list);
+            recyclerView.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
+            final WalkingSessionRecyclerViewAdapter adapter = new WalkingSessionRecyclerViewAdapter(mContext, new ArrayList<>());
             // Get a new or existing ViewModel from the ViewModelProvider.
             mWalkingSessionViewModel = ViewModelProviders.of(this).get(WalkingSessionViewModel.class);
             // Add an observer on the LiveData returned by getAlphabetizedWords.
@@ -95,7 +98,7 @@ public class WalkingSessionFragment extends Fragment {
             });
             recyclerView.setAdapter(adapter);
 
-        }
+//        }
         return rootView;
     }
 
