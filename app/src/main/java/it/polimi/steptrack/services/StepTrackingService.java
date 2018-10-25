@@ -631,7 +631,6 @@ public class StepTrackingService extends Service
 
     public void manualEndWalkingSession() {
         Log.i(TAG, "Manually stopping sensor session.");
-        clearSensorOffset();
         if(removeLocationUpdates()){
             mSessionStarted = false;
             if (mWalkingSessionId != -1) {
@@ -648,9 +647,10 @@ public class StepTrackingService extends Service
         }else {
             mSessionStarted = true;
         }
+        clearSensorOffset();
         AppUtils.setKeyStartingWalkingSession(self,mSessionStarted);
-
     }
+
     public void updateSessionTag(String inputTag) {
         if (mWalkingSessionId != -1) {
             mWalkingSession.mTag = inputTag;

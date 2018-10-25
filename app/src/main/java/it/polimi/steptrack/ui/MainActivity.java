@@ -627,6 +627,7 @@ public class MainActivity extends AppCompatActivity
                                                 mService.updateSessionTag("dumped");
                                                 dialog.cancel();
                                                 Toast.makeText(self, "Session not Saved", Toast.LENGTH_SHORT).show();
+                                                AppUtils.setKeyManualMode(self,false);
                                             }
                                         });
                         AlertDialog setTagDialog = setTagDialogBuilder.create();
