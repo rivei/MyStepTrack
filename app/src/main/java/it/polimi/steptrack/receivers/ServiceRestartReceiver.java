@@ -24,10 +24,13 @@ public class ServiceRestartReceiver extends BroadcastReceiver {
         if (AppUtils.getKeyPhoneReboot(context)) {
             int currentStepCount = AppUtils.getLastStepCount(context);
             AppUtils.setStepCountOffset(context, (0 - currentStepCount));
-        }
+
+            //TODO: Should check the last report time, if it is from yesterday,
+            //should generate daily report to database; then update last report time
+        } //else, should report error when the app stopped before shutdown
+
         if (AppUtils.getServiceRunningStatus(context) == SERVICE_NOT_RUNNING) {
             context.startService(new Intent(context, StepTrackingService.class));
-            //context.startActivity(new Intent(context, MainActivity.class));
         }
 
         AppUtils.removeKeyPhoneReboot(context);

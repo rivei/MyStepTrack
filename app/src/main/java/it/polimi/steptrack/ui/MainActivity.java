@@ -19,8 +19,8 @@ import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AlertDialog;
-import android.support.v7.widget.RecyclerView;
 import android.text.InputType;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -58,11 +58,10 @@ import it.polimi.steptrack.roomdatabase.dao.DailySummaryDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
-import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.DailySummary;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
-import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
-import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
+import it.polimi.steptrack.roomdatabase.entities.HourlySteps;
+import it.polimi.steptrack.roomdatabase.entities.StepDetected;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.services.StepTrackingService;
@@ -194,7 +193,8 @@ public class MainActivity extends AppCompatActivity
         int id = item.getItemId();
 
         Fragment fragment = null;
-
+        FragmentManager fragmentManager =  getSupportFragmentManager();
+        FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
         if (id == R.id.nav_camera) {
             // update the main content by replacing fragments
             LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
@@ -203,44 +203,51 @@ public class MainActivity extends AppCompatActivity
                 PickHomeAddress();
                 return false;
             }
-            fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+//            if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
+                fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
 
-            FragmentManager fragmentManager = getSupportFragmentManager();
-            fragmentManager.beginTransaction()
-                    .replace(R.id.fragment_container, fragment)
-                    .addToBackStack(null)
-                    .commit();
-
+                fragmentTransaction.replace(R.id.fragment_container, fragment, StatusFragment.TAG);
+//                fragmentTransaction.addToBackStack(StatusFragment.TAG);
+                fragmentTransaction.commit();
+//            }else {
+//                fragmentManager.popBackStack();
+//            }
         } else if (id == R.id.nav_gallery) {
             //Pick the location for home address
-            fragment = SettingFragment.newInstance("1", "2");
-            FragmentManager fragmentManager = getSupportFragmentManager();
-            fragmentManager.beginTransaction()
-                    .replace(R.id.fragment_container, fragment)
-                    .addToBackStack(null)
-                    .commit();
-
+//            if (fragmentManager.findFragmentByTag(SettingFragment.TAG) == null) {
+                fragment = SettingFragment.newInstance("1", "2");
+            fragmentTransaction.replace(R.id.fragment_container, fragment, SettingFragment.TAG);
+            if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
+                fragmentTransaction.addToBackStack(SettingFragment.TAG);
+            }
+            fragmentTransaction.commit();
         } else if (id == R.id.nav_slideshow) {
-            //TODO: Export all data
+            //TODO: Export all data progressbar
             Log.w(TAG, "Going to export data");
 //            Intent createFileIntent = new Intent(this, DataExportIntentService.class);
 //            startService(createFileIntent);
 //            Log.w(TAG,"FINISHED??");
             ExportData();
         } else if (id == R.id.nav_manage) {
-            WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG)
-                    .addToBackStack(null)
-                    .commit();
+//            if (fragmentManager.findFragmentByTag(WalkingSessionFragment.TAG) == null) {
+                WalkingSessionFragment walkingSessionFragment = new WalkingSessionFragment();
 
+                fragmentTransaction.replace(R.id.fragment_container, walkingSessionFragment, WalkingSessionFragment.TAG);
+            if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
+                fragmentTransaction.addToBackStack(WalkingSessionFragment.TAG);
+            }
+            fragmentTransaction.commit();
+
+//            }
         } else if (id == R.id.nav_share) {
-            ReportFragment reportFragment = new ReportFragment();
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.fragment_container, reportFragment, ReportFragment.TAG)
-                    .addToBackStack(null)
-                    .commit();
-
+//            if (fragmentManager.findFragmentByTag(ReportFragment.TAG) == null) {
+                ReportFragment reportFragment = new ReportFragment();
+            fragmentTransaction.replace(R.id.fragment_container, reportFragment, ReportFragment.TAG);
+            if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
+                fragmentTransaction.addToBackStack(ReportFragment.TAG);
+            }
+            fragmentTransaction.commit();
+//            }
         } else if (id == R.id.nav_send) {
 
         }
@@ -287,13 +294,15 @@ public class MainActivity extends AppCompatActivity
         }
         else {
             StatusFragment fragment;
-            fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
             FragmentManager fragmentManager = getSupportFragmentManager();
-            fragmentManager.beginTransaction()
-                    //.add(R.id.fragment_container, fragment, StatusFragment.TAG)
-                    .replace(R.id.fragment_container, fragment, StatusFragment.TAG)
-                    .addToBackStack(null)
-                    .commit();
+            if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
+                fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+                fragmentManager.beginTransaction()
+                        .add(R.id.fragment_container, fragment, StatusFragment.TAG)
+                        //.replace(R.id.fragment_container, fragment, StatusFragment.TAG)
+                        //.addToBackStack(null)
+                        .commit();
+            }
         }
     }
 
@@ -459,7 +468,7 @@ public class MainActivity extends AppCompatActivity
                 Log.i(TAG, "User interaction was cancelled.");
             } else if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 // Permission was granted. TODO make this only for location update
-                //mService.requestNewWalkingSession();
+                //mService.requestLocationUpdates(false);
             } else {
                 // Permission denied.
                 // setButtonsState(false);
@@ -506,20 +515,7 @@ public class MainActivity extends AppCompatActivity
 //                AppUtils.writeFile(filename, header, rawDataList);
 //            }
 //        };
-//        t.start();
-//        t = new Thread() {
-//            public void run() {
-//                AppDatabase mDB = AppDatabase.getInstance(self);
-//                List<String> rawDataList = new ArrayList<String>();
-//                for (GeoFencingEvent event : mDB.geoFencingEventDao().getAllFencesSynchronous()) {
-//                    rawDataList.add(event.toString());
-//                }
-//                String filename = "Geofences.csv";
-//                final String header = "timestamp, transition \n";
-//                AppUtils.writeFile(filename, header, rawDataList);
-//            }
-//        };
-//        t.start();
+
         Thread t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
@@ -554,24 +550,24 @@ public class MainActivity extends AppCompatActivity
                     rawDataList.add(session.toString());
                 }
                 String filename = "walkingsession.csv";
-                final String header = "user_Id,session_id,StartTime,EndTime,StartNano,EndNano,StepCount,StepDetect,Distance,AverageSpeed,Duration,Tag\n";
+                final String header = "user_Id,session_id,StartTime,EndTime,StepCount,StepDetect,Distance,AverageSpeed,Duration,Tag\n";
                 AppUtils.writeFile(filename, header, rawDataList);
             }
         };
         t.start();
-//        t = new Thread() {
-//            public void run() {
-//                AppDatabase mDB = AppDatabase.getInstance(self);
-//                List<String> rawDataList = new ArrayList<String>();
-//                for (GyroscopeSample gyroSample : mDB.gyroSampleDao().getAllSamplesSynchronous()) {
-//                    rawDataList.add(gyroSample.toString());
-//                }
-//                String filename = "gyroSamples.csv";//"Insoles - " + sessionDate;
-//                final String header = "session_id, timestamp, gyro_x, gyro_y, gyro_z \n";
-//                AppUtils.writeFile(filename, header, rawDataList);
-//            }
-//        };
-//        t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (HourlySteps hourlySteps : mDB.hourlyStepsDao().getAllStepsSynchronous()) {
+                    rawDataList.add(hourlySteps.toString());
+                }
+                String filename = "hourlySteps.csv";
+                final String header = "id,timestamp,cum_steps\n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
         t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
@@ -585,6 +581,20 @@ public class MainActivity extends AppCompatActivity
             }
         };
         t.start();
+        t = new Thread() {
+            public void run() {
+                AppDatabase mDB = AppDatabase.getInstance(self);
+                List<String> rawDataList = new ArrayList<String>();
+                for (StepDetected steps : mDB.stepDetectedDao().getAllStepsSynchronous()) {
+                    rawDataList.add(steps.toString());
+                }
+                String filename = "steps.csv";
+                final String header = "session_id,timestamp,step\n";
+                AppUtils.writeFile(filename, header, rawDataList);
+            }
+        };
+        t.start();
+
     }
 
     @Override
@@ -593,9 +603,9 @@ public class MainActivity extends AppCompatActivity
             case StatusFragment.ON_START_CLICKED:
                 if (mService != null){
                     if (! AppUtils.startingWalkingSession(self)){
-                        mService.requestNewWalkingSession();
+                        mService.manualStartNewSession();
                     }else {
-                        mService.manualEndWalkingSession();
+                        mService.manualStopSession();
                         /**
                          * Pop up dialog for walking session Tag
                          */
@@ -633,7 +643,7 @@ public class MainActivity extends AppCompatActivity
                         AlertDialog setTagDialog = setTagDialogBuilder.create();
                         setTagDialog.show();
 
-//                        mService.manualEndWalkingSession();
+//                        mService.manualStopSession();
 //                        //TODO: this should be done after the task finished (wait for result?)
 //                        Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
                     }
@@ -722,7 +732,7 @@ public class MainActivity extends AppCompatActivity
 
         @Override
         protected Void doInBackground(Void... params) {
-            reportDao.deleteAll();
+            //reportDao.deleteAll();
             SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy");
             //String strDate = "20/10/2018 00:00:00";
             Date date = null;

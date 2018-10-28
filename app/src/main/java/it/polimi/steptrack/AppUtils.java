@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.util.Log;
 import android.widget.Toast;
@@ -31,6 +32,7 @@ import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 
+import static it.polimi.steptrack.AppConstants.MILLI2NANO;
 import static it.polimi.steptrack.AppConstants.SERVICE_NOT_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
@@ -65,6 +67,19 @@ public class AppUtils {
         }
         return status;
     }
+
+    public static final String KEY_FIRST_INSTALL_TIME = "first_install_time";
+    public static long getFirstInstallTime(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getLong(KEY_FIRST_INSTALL_TIME,0);
+    }
+    public static void setKeyFirstInstallTime(Context context, long firsttime){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putLong(KEY_FIRST_INSTALL_TIME, firsttime)
+                .apply();
+    }
+
 
     public static final String KEY_ACTIVITY_ACTIVE = "activity_active";
     public static boolean getKeyActivityActive(Context context){
@@ -117,7 +132,7 @@ public class AppUtils {
     public static int getStepCountOffset(Context context) {
         //step counts to be subtracted
         return PreferenceManager.getDefaultSharedPreferences(context)
-                .getInt(KEY_STEP_COUNT_OFFSET, 0);
+                .getInt(KEY_STEP_COUNT_OFFSET, Integer.MIN_VALUE);
     }
 
     public static void setStepCountOffset(Context context, int stepsOffset) {
@@ -151,6 +166,19 @@ public class AppUtils {
                 .apply();
     }
 
+
+    public static final String KEY_REPORT_STEPS = "report_steps";
+    public static int getReportSteps(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getInt(KEY_REPORT_STEPS,0);
+    }
+    public static void setKeyReportSteps(Context context, int steps){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putInt(KEY_REPORT_STEPS, steps)
+                .apply();
+    }
+
     public static final String KEY_SAMPLING_FREQUENCY = "sampling_frequency";
     public static long getSamplingFrequency(Context context){
         return  PreferenceManager.getDefaultSharedPreferences(context)
@@ -172,6 +200,11 @@ public class AppUtils {
 //        return true;
 //    }
 
+    //convert
+    public static long elapsedTime2timestamp(long timeNano){
+        //long curTime = System.currentTimeMillis();
+        return System.currentTimeMillis() + (timeNano - SystemClock.elapsedRealtimeNanos())/MILLI2NANO;
+    }
 
     /**
      * For location
@@ -200,7 +233,7 @@ public class AppUtils {
     }
 
     public static final String KEY_REQUESTING_LOCATION_UPDATES_FAST = "requesting_locaction_updates_fast";
-    public static boolean requestingLocationUpdatesFast(Context context) {
+    public static boolean getKeyRequestingLocationUpdatesFast(Context context) {
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getBoolean(KEY_REQUESTING_LOCATION_UPDATES_FAST, false);
     }
@@ -316,8 +349,26 @@ public class AppUtils {
         }else{
             return false;
         }
-
     }
+    public static boolean isBeforeToday(long timestamp){
+        Calendar c = Calendar.getInstance();
+        Calendar today = Calendar.getInstance();
+        c.setTimeInMillis(timestamp);
+        today.setTimeInMillis(System.currentTimeMillis());
+        today.set(Calendar.HOUR_OF_DAY, 0);
+        today.set(Calendar.MINUTE, 0);
+        today.set(Calendar.SECOND, 1);
+        today.set(Calendar.MILLISECOND, 1);
+
+        if(c.before(today)){
+//        if(c.get(Calendar.DATE) <= (today.get(Calendar.DATE) - 1)) {
+            return true;
+        }else{
+            return false;
+        }
+    }
+
+
     public static long getTomorrow() {
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(System.currentTimeMillis());
@@ -347,13 +398,13 @@ public class AppUtils {
         return detectedActivities;
     }
 
-    public static List<String> Acc2String(AppDatabase db) {
-        List<String> strings = null;
-        for (AccelerometerSample sample : db.accSampleDao().getAllSamplesSynchronous()) {
-            strings.add(sample.toString());
-        }
-        return strings;
-    }
+//    public static List<String> Acc2String(AppDatabase db) {
+//        List<String> strings = null;
+//        for (AccelerometerSample sample : db.accSampleDao().getAllSamplesSynchronous()) {
+//            strings.add(sample.toString());
+//        }
+//        return strings;
+//    }
 
     public static void writeFile(String filename, String fileheader, List<String> dataList){
         FileOutputStream outputStream;

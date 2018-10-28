@@ -10,6 +10,8 @@ public final class AppConstants {
     public static final long MILLI2NANO = 1000000;
     public static final long SECOND2NANO = 1000 * MILLI2NANO;
     public static final long MINUTE2NANO = 60 * SECOND2NANO;
+    public static final long SECOND2MILLI = 1000;
+    public static final long MINUTE2MILLI = 60 * SECOND2MILLI;
 
     /**
      * For StepTrackingService
@@ -18,7 +20,8 @@ public final class AppConstants {
     public final static int SERVICE_NOT_RUNNING = 0;
     public final static int SERVICE_RUNNING = 1;
     public final static int SERVICE_RUNNING_FOREGROUND = 2;
-
+    public static final long STEP_SAVE_INTERVAL = 1000 * 60 * 60; //save every hour
+    public static final int STEP_SAVE_OFFSET = 50; //TODO: save to db every 50 steps;
 
     /**
      * For Locations
@@ -26,9 +29,13 @@ public final class AppConstants {
     // The desired interval for location updates. Inexact. Updates may be more or less frequent.
     public static final long UPDATE_INTERVAL_IN_MILLISECONDS = 20000; //20s
     //The fastest rate for active location updates. Updates will never be more frequent than this value.
-    public static final long FAST_UPDATE_INTERVAL_IN_MILLISECONDS = 2000; //2s
+    public static final long FAST_UPDATE_INTERVAL_IN_MILLISECONDS = 5000;//2000; //2s
 //            UPDATE_INTERVAL_IN_MILLISECONDS / 2; //5s
     public static final float GPS_ACCEPTABLE_ACCURACY = 25f;  //TODO: define GPS accuracy radius
+    public static final float GPS_ACCURACY_THRESHOLD = 50f;
+    public static final float GPS_ACCURACY_FOR_SUM = 10f;     //only points within this accuracy will be counted
+    public static final float GPS_DISTANCE_THRESHOLD_FOR_SUM = GPS_ACCURACY_FOR_SUM/2;         //only sum when the distance between 2 points are bigger than this
+
 
     /**
      * For stepcount sensors

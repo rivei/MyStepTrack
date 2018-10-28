@@ -1,7 +1,6 @@
 package it.polimi.steptrack.services;
 
 import android.app.IntentService;
-import android.arch.lifecycle.LiveData;
 import android.content.Intent;
 import android.os.Environment;
 import android.support.annotation.Nullable;
@@ -12,13 +11,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.List;
 
-import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
-import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
-import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
-import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
-import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
-import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 
 public class DataExportIntentService extends IntentService {
     private static final String TAG = DataExportIntentService.class.getSimpleName();
@@ -60,7 +53,7 @@ public class DataExportIntentService extends IntentService {
 //        mWalkingEvents = mDB.walkingEventDao().getAllActivities();
 //        mGeofencingEvent = mDB.geoFencingEventDao().getAllFences();
         Log.w(TAG, "Prepare to read DB");
-        List<String> rawDataList = AppUtils.Acc2String(mDB);
+        //List<String> rawDataList = AppUtils.Acc2String(mDB);
 
         String filename = "alldata.txt";//"Insoles - " + sessionDate;
         File f;
@@ -69,44 +62,30 @@ public class DataExportIntentService extends IntentService {
         final String header = "user_id, session_id, start_time, end_time，step_count，step_detect" +
                 "，distance，average_speed，duration，tag \n";
 
-        try {
-            f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), filename);
-            outputStream = new FileOutputStream(f);
-
-            // Print header
-            outputStream.write(header.getBytes());
-            // Print Raw Data
-            for(String s : rawDataList){
-                outputStream.write(
-                        (s != null) ? s.getBytes() : DATA_NULL.getBytes()
-                );
-                outputStream.write("\n".getBytes());
-            }
-
-            outputStream.close();
-            Log.e(TAG, "Output Stream Closed");
-
-            Toast.makeText(this,"Export finished", Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        Log.i(TAG, "End service");
+//        try {
+//            f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), filename);
+//            outputStream = new FileOutputStream(f);
+//
+//            // Print header
+//            outputStream.write(header.getBytes());
+//            // Print Raw Data
+//            for(String s : rawDataList){
+//                outputStream.write(
+//                        (s != null) ? s.getBytes() : DATA_NULL.getBytes()
+//                );
+//                outputStream.write("\n".getBytes());
+//            }
+//
+//            outputStream.close();
+//            Log.e(TAG, "Output Stream Closed");
+//
+//            Toast.makeText(this,"Export finished", Toast.LENGTH_LONG).show();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//
+//        Log.i(TAG, "End service");
 
     }
 
-//    private static class getDataAsyncTask extends AsyncTask<GeoFencingEvent, Void, Void> {
-//
-//        private GeoFencingEventDao mAsyncTaskDao;
-//
-//        insertFenceAsyncTask(GeoFencingEventDao dao) {
-//            mAsyncTaskDao = dao;
-//        }
-//
-//        @Override
-//        protected Void doInBackground(GeoFencingEvent... geoFencingEvents) {
-//            mAsyncTaskDao.insert(geoFencingEvents[0]);
-//            return null;
-//        }
-//    }
 }

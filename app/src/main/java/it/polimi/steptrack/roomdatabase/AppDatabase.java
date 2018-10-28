@@ -10,19 +10,16 @@ import android.arch.persistence.room.TypeConverters;
 import android.content.Context;
 import android.support.annotation.NonNull;
 
-import it.polimi.steptrack.AppExecutors;
-import it.polimi.steptrack.roomdatabase.dao.AccelerometerSampleDao;
 import it.polimi.steptrack.roomdatabase.dao.DailySummaryDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
-import it.polimi.steptrack.roomdatabase.dao.GeoFencingEventDao;
-import it.polimi.steptrack.roomdatabase.dao.GyroscopeSampleDao;
+import it.polimi.steptrack.roomdatabase.dao.HourlyStepsDao;
+import it.polimi.steptrack.roomdatabase.dao.StepDetectedDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.UserDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
-import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
 import it.polimi.steptrack.roomdatabase.entities.DailySummary;
-import it.polimi.steptrack.roomdatabase.entities.GeoFencingEvent;
-import it.polimi.steptrack.roomdatabase.entities.GyroscopeSample;
+import it.polimi.steptrack.roomdatabase.entities.HourlySteps;
+import it.polimi.steptrack.roomdatabase.entities.StepDetected;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.SensorSample;
 import it.polimi.steptrack.roomdatabase.entities.User;
@@ -32,12 +29,14 @@ import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 @Database(entities = {User.class,
         WalkingSession.class,
         GPSLocation.class,
-        GeoFencingEvent.class,
+//        GeoFencingEvent.class,
         SensorSample.class,
-        AccelerometerSample.class,
-        GyroscopeSample.class,
+//        AccelerometerSample.class,
+//        GyroscopeSample.class,
         WalkingEvent.class,
-        DailySummary.class},
+        DailySummary.class,
+        HourlySteps.class,
+        StepDetected.class},
         version = 1,
         exportSchema = false)
 @TypeConverters(DateConverter.class)
@@ -49,11 +48,13 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract UserDao userDao();
     public abstract WalkingSessionDao sessionDao();
     public abstract GPSLocationDao locationDao();
-    public abstract AccelerometerSampleDao accSampleDao();
-    public abstract GyroscopeSampleDao gyroSampleDao();
+//    public abstract AccelerometerSampleDao accSampleDao();
+//    public abstract GyroscopeSampleDao gyroSampleDao();
     public abstract WalkingEventDao walkingEventDao();
-    public abstract GeoFencingEventDao geoFencingEventDao();
+//    public abstract GeoFencingEventDao geoFencingEventDao();
     public abstract DailySummaryDao dailySummaryDao();
+    public abstract HourlyStepsDao hourlyStepsDao();
+    public abstract StepDetectedDao stepDetectedDao();
     private final MutableLiveData<Boolean> mIsDatabaseCreated = new MutableLiveData<>();
 
 //    public static AppDatabase getInstance(final Context context, final AppExecutors executors) {
@@ -89,20 +90,6 @@ public abstract class AppDatabase extends RoomDatabase {
         return sInstance;
     }
 
-/*    public static HollywoodDatabase get(Context context, boolean isMemory) {
-        if (db == null) {
-            if (isMemory) {
-                db = Room.inMemoryDatabaseBuilder(context.getApplicationContext(),
-                        HollywoodDatabase.class);
-            } else {
-                db = Room.databaseBuilder(context.getApplicationContext(), HollywoodDatabase.class, "movie-db")
-                        // don't do this on a real app!
-                        .allowMainThreadQueries()
-                        .build();
-            }
-        }
-        return db; //TODO another way of building / initializing db
-    }*/
 
 //    /**
 //     * Build the database. {@link Builder#build()} only sets up the database configuration and

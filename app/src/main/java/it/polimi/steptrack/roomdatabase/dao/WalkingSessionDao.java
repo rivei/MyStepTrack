@@ -21,10 +21,10 @@ public interface WalkingSessionDao {
     @Query("DELETE FROM sessions")
     void deleteAll();
 
-    @Query("SELECT * from sessions ORDER BY user_id ASC")
+    @Query("SELECT * from sessions ORDER BY start_time DESC")
     LiveData<List<WalkingSession>> getAllSessions();
 
-    @Query("SELECT * from sessions ORDER BY user_id ASC")
+    @Query("SELECT * from sessions ORDER BY start_time ASC")
     List<WalkingSession> getAllSessionsSynchronous();
 
     @Query("SELECT * from sessions WHERE sid == :SessionId")
@@ -33,6 +33,9 @@ public interface WalkingSessionDao {
 //    //get all session id from one day
 //    @Query("SELECT sid FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
 //    List<Long> getSessionsID(long startTime, long endTime);
+
+    @Query("SELECT COUNT(*) FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")
+    int getNumOfSessions(long startTime, long endTime);
 
     //total duration for one day
     @Query("SELECT SUM(duration) FROM sessions WHERE start_time BETWEEN :startTime AND :endTime")

@@ -1,7 +1,6 @@
 package it.polimi.steptrack.roomdatabase.dao;
 
 import android.arch.lifecycle.LiveData;
-import android.arch.lifecycle.MutableLiveData;
 import android.arch.persistence.room.Dao;
 import android.arch.persistence.room.Insert;
 import android.arch.persistence.room.Query;
@@ -27,7 +26,7 @@ public interface DailySummaryDao {
     @Query("SELECT * from daily_summaries ORDER BY did DESC")
     LiveData<List<DailySummary>> getAllSummaries();
 
-    @Query("SELECT * from daily_summaries ORDER BY did DESC")
+    @Query("SELECT * from daily_summaries ORDER BY did ASC")
     List<DailySummary> getAllSummariesSynchronous();
 //
 //    @Query("SELECT * from daily_summaries WHERE did = (SELECT MAX(did) FROM daily_summaries)")

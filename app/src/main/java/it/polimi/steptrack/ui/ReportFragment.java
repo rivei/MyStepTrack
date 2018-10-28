@@ -24,7 +24,7 @@ public class ReportFragment extends Fragment {
     public static final String TAG = ReportFragment.class.getSimpleName();
 
     private ReportViewModel mViewModel;
-    private DailySummaryViewAdapter mAdapter;
+//    private DailySummaryViewAdapter mAdapter;
 
     public static ReportFragment newInstance() {
         return new ReportFragment();
@@ -38,15 +38,7 @@ public class ReportFragment extends Fragment {
 
         RecyclerView recyclerView = rootView.findViewById(R.id.reportlist);
         recyclerView.setLayoutManager(new LinearLayoutManager(rootView.getContext(), LinearLayoutManager.VERTICAL, false));
-        mAdapter = new DailySummaryViewAdapter(rootView.getContext());
-        recyclerView.setAdapter(mAdapter);
-
-        return rootView;
-    }
-
-    @Override
-    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
+        final DailySummaryViewAdapter mAdapter = new DailySummaryViewAdapter(rootView.getContext());
         mViewModel = ViewModelProviders.of(this).get(ReportViewModel.class);
         // TODO: Use the ViewModel
         mViewModel.getAllReports().observe(this, new Observer<List<DailySummary>>() {
@@ -55,6 +47,23 @@ public class ReportFragment extends Fragment {
                 mAdapter.setReports(dailySummaries);
             }
         });
+
+        recyclerView.setAdapter(mAdapter);
+
+        return rootView;
     }
+
+//    @Override
+//    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+//        super.onActivityCreated(savedInstanceState);
+//        mViewModel = ViewModelProviders.of(this).get(ReportViewModel.class);
+//        // TODO: Use the ViewModel
+//        mViewModel.getAllReports().observe(this, new Observer<List<DailySummary>>() {
+//            @Override
+//            public void onChanged(@Nullable List<DailySummary> dailySummaries) {
+//                mAdapter.setReports(dailySummaries);
+//            }
+//        });
+//    }
 
 }

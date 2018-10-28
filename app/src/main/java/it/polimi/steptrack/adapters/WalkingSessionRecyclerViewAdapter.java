@@ -101,14 +101,16 @@ public class WalkingSessionRecyclerViewAdapter extends RecyclerView.Adapter<Walk
         private final TextView mDurationView;
         private final TextView mDistanceView;
         private final TextView mSpeedView;
+        private final TextView mStepView;
 
         private ViewHolder(View view) {
             super(view);
-            mIdView = (TextView) view.findViewById(R.id.tvId);
-            mTimeView = (TextView) view.findViewById(R.id.tvTime);
+            mIdView =  view.findViewById(R.id.tvId);
+            mTimeView = view.findViewById(R.id.tvTime);
             mDurationView = view.findViewById(R.id.tvDuration);
             mDistanceView = view.findViewById(R.id.tvDistance);
             mSpeedView = view.findViewById(R.id.tvSpeed);
+            mStepView = view.findViewById(R.id.tvSteps);
         }
 
         private void bind(final WalkingSession walkingSession){
@@ -118,9 +120,10 @@ public class WalkingSessionRecyclerViewAdapter extends RecyclerView.Adapter<Walk
                 String str;
                 str = "Session date: " + DateFormat.getDateInstance().format(ssdate);
                 mTimeView.setText(str);
-                mDurationView.setText("Duration: " + walkingSession.mDuration/1000 + " s");
+                mDurationView.setText("Duration: " + walkingSession.mDuration + " s");
                 mDistanceView.setText("Distance: " + walkingSession.mDistance + "m");
                 mSpeedView.setText("Average speed: " + walkingSession.mAverageSpeed + "m/s");
+                mStepView.setText("Steps: " + walkingSession.mStepCount);
             }
             else {
                 mIdView.setText("no session");

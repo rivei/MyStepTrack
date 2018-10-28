@@ -68,7 +68,7 @@ public class DailySummaryViewAdapter extends RecyclerView.Adapter<DailySummaryVi
         public void bind(DailySummary report){
             if(report!=null){
                 tvDate.setText("Date:" + report.mDate);
-                tvSteps.setText("Steps: " + report.stepDetect);
+                tvSteps.setText("Steps: " + report.steps);
                 tvSpeed.setText("Speed: " + report.speed);
                 tvDuration.setText("Duration: " + report.walkingduration);
                 tvDistance.setText("Distance: " + report.distance);

@@ -24,7 +24,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
@@ -64,10 +63,14 @@ import it.polimi.steptrack.roomdatabase.AppDatabase;
 import it.polimi.steptrack.roomdatabase.DateConverter;
 import it.polimi.steptrack.roomdatabase.dao.DailySummaryDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
+import it.polimi.steptrack.roomdatabase.dao.HourlyStepsDao;
+import it.polimi.steptrack.roomdatabase.dao.StepDetectedDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
 import it.polimi.steptrack.roomdatabase.entities.DailySummary;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
+import it.polimi.steptrack.roomdatabase.entities.HourlySteps;
+import it.polimi.steptrack.roomdatabase.entities.StepDetected;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
@@ -75,9 +78,14 @@ import it.polimi.steptrack.ui.MainActivity;
 import static it.polimi.steptrack.AppConstants.BATCH_LATENCY_5s;
 import static it.polimi.steptrack.AppConstants.FAST_UPDATE_INTERVAL_IN_MILLISECONDS;
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
-import static it.polimi.steptrack.AppConstants.MINUTE2NANO;
-import static it.polimi.steptrack.AppConstants.SECOND2NANO;
+import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_FOR_SUM;
+import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_THRESHOLD;
+import static it.polimi.steptrack.AppConstants.GPS_DISTANCE_THRESHOLD_FOR_SUM;
+import static it.polimi.steptrack.AppConstants.MINUTE2MILLI;
+import static it.polimi.steptrack.AppConstants.SECOND2MILLI;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
+import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
+import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
 import static it.polimi.steptrack.AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS;
 
 public class StepTrackingService extends Service
@@ -96,7 +104,7 @@ public class StepTrackingService extends Service
 
     private long mTransitionEnterTime = -1L;
     private long mTransitionExitTime = -1L;
-    private boolean mOutofHome = false; //radius greater than threshold.
+    private boolean mOutofHome = false; //TODO: radius greater than threshold (30 meters + accuracy).
     private boolean mManualMode = false; //when manual mode is true, walking session doesn't depends on other things;
     private int mGPSLostTimes = 0;
     private int mGPSStableTimes = 0;
@@ -106,13 +114,13 @@ public class StepTrackingService extends Service
      */
     private static final String CHANNEL_ID = "channel_01"; //notification channel name
 
-    static final String ACTION_BROADCAST = PACKAGE_NAME + ".broadcast";
+//    static final String ACTION_BROADCAST = PACKAGE_NAME + ".broadcast";
+//
+//    static final String EXTRA_LOCATION = PACKAGE_NAME + ".location";
+//    private static final String EXTRA_STARTED_FROM_NOTIFICATION = PACKAGE_NAME +
+//            ".started_from_notification";
 
-    static final String EXTRA_LOCATION = PACKAGE_NAME + ".location";
-    private static final String EXTRA_STARTED_FROM_NOTIFICATION = PACKAGE_NAME +
-            ".started_from_notification";
-
-    private final IBinder mBinder = new LocalBinder();
+    private final IBinder mBinder = new LocalBinder(); //for binding Main activity
 
     private static final int NOTIFICATION_ID = 12345678; //The identifier for the notification displayed for the foreground service.
     /**
@@ -148,16 +156,15 @@ public class StepTrackingService extends Service
      * The current location.
      */
     private Location mCurrentLocation;
+    private Location mLastLocation;
     private LatLng mHomeCoordinate = null;
-
+    private float mTotalDistance = 0f;
 
     /**
      * For activity detection
      */
     private PendingIntent mPendingIntent;
     private TransitionsReceiver mTransitionsReceiver;
-
-
 
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
@@ -166,37 +173,37 @@ public class StepTrackingService extends Service
     private Sensor gyroSensor = null;
     private Sensor magnSensor = null;
 
-
     private float[] accelerometerMatrix = new float[3];
     private float[] gyroscopeMatrix = new float[3];
     private float[] magneticMatrix = new float[3];
 
     private long sensorRecordInterval = 0;
-    private long sensorTimeRef1 = -1L;
-    private long sensorTimeRef2 = -1L;
-    private long sysTimeRef1 = -1L;
-    private long sysTimeRef2 = -1L;
-    private long startoffset = -1L;
-    private long rateoffset = -1L;
-    private long curTime = -1L;
-    private long lastUpdate = -1L;
+//    private long sensorTimeRef1 = -1L;
+//    private long sensorTimeRef2 = -1L;
+//    private long sysTimeRef1 = -1L;
+//    private long sysTimeRef2 = -1L;
+//    private long startoffset = -1L;
+//    private long rateoffset = -1L;
+    private long mCurSensorTime = -1L;
+    private long mLastSensorUpdate = -1L;
+    private int mTotalStepsCount = 0;
+    private int mHourlyStepsOffset = 0;
+    private int mStepsAtStart = 0;
+    private int mStepsDetect = 0;
+    //private long mLastStepTime = 0L;
+    private int mStepCountOffset = 0;
 
-    //TODO: for database:
+    /**
+     *  for database
+     */
     private AppDatabase mDB;
-    //private DataRepository mAccRepo;
-    //private AccelerometerSample mAccSample;
-    //private GyroscopeSample mGyroSample;
-    private GPSLocation mGPSLocation;
+//    private GPSLocation mGPSLocation;
     private WalkingSession mWalkingSession;
     private long mWalkingSessionId = -1;
-    private int mStepsCount = 0;
-    private int stepsCountS = 0;
-    private int mStepsDetect = 0;
-    private long mLastStepTime = 0L;
 
     private File mStepTrackDir = null;
     private File mSessionFile = null;
-    private final String sessionHeader = "timestampNANO,acc_X,acc_Y,acc_Z,gyro_X,gyro_Y,gyro_Z," +
+    private final String sessionHeader = "timestamp,acc_X,acc_Y,acc_Z,gyro_X,gyro_Y,gyro_Z," +
                                         "magn_X,magn_Y,magn_Z,latitude,longitude,accuracy,speed \n";
 
 
@@ -206,6 +213,11 @@ public class StepTrackingService extends Service
     @Override
     public void onCreate() {
         Log.w(TAG, "On Creating");
+        if (AppUtils.getFirstInstallTime(self) == 0){
+            AppUtils.setKeyFirstInstallTime(self, System.currentTimeMillis());
+        }
+        mDB = AppDatabase.getInstance(this);
+
         /**
          * setup fused location client and call back
          */
@@ -248,14 +260,15 @@ public class StepTrackingService extends Service
         }
         long freq = AppUtils.getSamplingFrequency(self);
         if(freq == 0){
-            sensorRecordInterval = SECOND2NANO/50; //default 50 hz
+            sensorRecordInterval = SECOND2MILLI/50; //default 50 hz
         }else {
-            sensorRecordInterval = SECOND2NANO/freq;
+            sensorRecordInterval = SECOND2MILLI/freq;
         }
 
         //************************* For step count *********************//
         // Setup Step Counter
-        mStepsCount = AppUtils.getLastStepCount(this) - AppUtils.getStepCountOffset(this);
+        mStepCountOffset = AppUtils.getStepCountOffset(self); //this will only change either at system start or after daily report
+        mTotalStepsCount = AppUtils.getLastStepCount(this) - mStepCountOffset;
 
         // Get Notification Manager
         mNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
@@ -272,7 +285,6 @@ public class StepTrackingService extends Service
             mNotificationManager.createNotificationChannel(mChannel);
         }
 
-
         /**
          * Activity Detection
           */
@@ -280,9 +292,6 @@ public class StepTrackingService extends Service
         mPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
         mTransitionsReceiver = new TransitionsReceiver();
         registerReceiver(mTransitionsReceiver, new IntentFilter(AppConstants.TRANSITIONS_RECEIVER_ACTION));
-
-        //TODO: db
-        mDB = AppDatabase.getInstance(this);
 
         /**
          * Setup File path for tracking records
@@ -305,7 +314,7 @@ public class StepTrackingService extends Service
         Log.i(TAG, "Foreground service started");
 
         //************************* For step count ~*********************//
-        //TODO: start Monitoring activities and locations
+        //start Monitoring activities and locations
         setupActivityTransitions();
 
         PreferenceManager.getDefaultSharedPreferences(self)
@@ -363,9 +372,7 @@ public class StepTrackingService extends Service
 
     @Override
     public void onDestroy() {
-
-
-        // Unregister the transitions: (TODO: in Activity.onPause)
+        // Unregister the transitions
         ActivityRecognition.getClient(this).removeActivityTransitionUpdates(mPendingIntent)
                 .addOnSuccessListener(new OnSuccessListener<Void>() {
                     @Override
@@ -379,7 +386,6 @@ public class StepTrackingService extends Service
                         Log.e(TAG, "Transitions could not be unregistered: " + e);
                     }
                 });
-        //TODO: Activity.onStop
         if (mTransitionsReceiver != null) {
             unregisterReceiver(mTransitionsReceiver);
             mTransitionsReceiver = null;
@@ -394,8 +400,8 @@ public class StepTrackingService extends Service
     }
 
     /**
-     * Makes a request for location updates. Note that in this sample we merely log the
-     * {@link SecurityException}.
+     * Makes a request for location updates. Note that the
+     * {@link SecurityException} is merely log.
      */
 
     public boolean requestLocationUpdates(boolean fastUpdate) {
@@ -403,6 +409,7 @@ public class StepTrackingService extends Service
         Log.i(TAG, "Requesting location updates:" + fastUpdate);
         AppUtils.setRequestingLocationUpdates(this, true);
         try {
+            //TODO: locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, new MyLocationListener());
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
             if(fastUpdate) {
                 mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
@@ -428,8 +435,9 @@ public class StepTrackingService extends Service
     private void startRecording(){
         mWalkingSession = new WalkingSession();
         mWalkingSession.mStartTime = System.currentTimeMillis();
-        mWalkingSession.mStartNano = SystemClock.elapsedRealtimeNanos();
-        stepsCountS = mStepsCount;
+//        mWalkingSession.mStartNano = SystemClock.elapsedRealtimeNanos();
+        mStepsAtStart = mTotalStepsCount;
+        mTotalDistance = 0f;
 
         Thread t = new Thread() {
             public void run() {
@@ -438,6 +446,11 @@ public class StepTrackingService extends Service
                 /**
                  * create walking session file
                  */
+                if (!mStepTrackDir.exists()) {
+                    if(!mStepTrackDir.mkdirs()){
+                        Log.e(TAG,"error creating folder");
+                    }
+                }
                 mSessionFile = new File(mStepTrackDir, mWalkingSessionId+".csv");
                 if(!mSessionFile.exists()) {
                     try {
@@ -448,11 +461,11 @@ public class StepTrackingService extends Service
                     }
                 }
                 FileOutputStream outputStream;
-                String sessionInfo = "StartTimestamp," + mWalkingSession.mStartTime +
-                        ",StartInNano," + mWalkingSession.mStartNano + "\n";
+//                String sessionInfo = "StartTimestamp," + mWalkingSession.mStartTime +
+//                        ",StartInNano," + mWalkingSession.mStartNano + "\n"; //elapsed time problem solved;
                 try {
                     outputStream = new FileOutputStream(mSessionFile);
-                    outputStream.write(sessionInfo.getBytes());
+//                    outputStream.write(sessionInfo.getBytes());
                     outputStream.write(sessionHeader.getBytes()); //write header
                     outputStream.close();
                 } catch (FileNotFoundException e) {
@@ -465,94 +478,37 @@ public class StepTrackingService extends Service
             }
         };
         t.start();
-        if (registerSensorListener()) {
-            Log.e(TAG, "Start recording");
-            Toast.makeText(this, "Starts session", Toast.LENGTH_LONG).show();
+        mCurSensorTime = 0L;
+        int numofSensors = registerSensorListener();
+        if (numofSensors > 0) {
+            if (numofSensors < 4){
+                Toast.makeText(this, "some sensor not compatible!", Toast.LENGTH_LONG).show();
+            }
+            Log.i(TAG, "Start recording");
+            Toast.makeText(this, "Starts session", Toast.LENGTH_SHORT).show();
             if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND){
                 updateNotification("Recording session");
             }
         } else {
-            Toast.makeText(this, "some sensor not Compatible!", Toast.LENGTH_LONG).show();
-            //this.stopSelf();
+            Toast.makeText(this, "No sensor available!", Toast.LENGTH_LONG).show();
         }
     }
 
-    public void requestNewWalkingSession() {
+    public void manualStartNewSession() {
         Log.i(TAG, "Requesting new walking session");
         AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
         if(requestLocationUpdates(true)){
             mSessionStarted = true;
             startRecording();
-/*
-            mSessionStarted = true;
-            mWalkingSession = new WalkingSession();
-            mWalkingSession.mStartTime = System.currentTimeMillis();
-            mWalkingSession.mStartNano = SystemClock.elapsedRealtimeNanos();
-            stepsCountS = mStepsCount;
-
-            Thread t = new Thread() {
-                public void run() {
-                    mWalkingSessionId = mDB.sessionDao().insert(mWalkingSession);
-                    mWalkingSession.sid = mWalkingSessionId;
-                    */
-/**
-                     * create walking session file
-                     *//*
-
-                    mSessionFile = new File(mStepTrackDir, mWalkingSessionId+".csv");
-                    if(!mSessionFile.exists()) {
-                        try {
-                            mSessionFile.createNewFile();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                            Log.e(TAG, "error in file creation");
-                        }
-                    }
-                    FileOutputStream outputStream;
-                    String sessionInfo = "StartTimestamp," + mWalkingSession.mStartTime +
-                            ",StartInNano," + mWalkingSession.mStartNano;
-                    try {
-                        outputStream = new FileOutputStream(mSessionFile);
-                        outputStream.write(sessionInfo.getBytes());
-                        outputStream.write(sessionHeader.getBytes()); //write header
-                        outputStream.close();
-                    } catch (FileNotFoundException e) {
-                        e.printStackTrace();
-                        Log.e(TAG,"create session file failed.");
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        Log.e(TAG, "write session header failed");
-                    }
-                }
-            };
-            t.start();
-*/
-
-/*            if (registerSensorListener()) {
-                Toast.makeText(this, "Starts session ", Toast.LENGTH_LONG).show();
-            } else {
-                Toast.makeText(this, "some sensor not Compatible!", Toast.LENGTH_LONG).show();
-                this.stopSelf();
-            }*/
         }else {
             mSessionStarted = false;
         }
         AppUtils.setKeyStartingWalkingSession(self,mSessionStarted);
-/*        try {
-            mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
-                    mLocationCallback, Looper.myLooper());
-            //TODO: locationManager.requestNewWalkingSession(LocationManager.GPS_PROVIDER, 5000, 10, new MyLocationListener());
-            //Add sensor listener:
-        } catch (SecurityException unlikely) {
-            mSessionStarted = false;
-            //AppUtils.setRequestingLocationUpdates(this, mSessionStarted);
-            AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
-            Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
-        }*/
+
     }
 
-    private boolean registerSensorListener(){
-        boolean isSuccess = false;
+    private int registerSensorListener(){
+        //boolean isSuccess = false;
         int numofSensors = 0;
         if(accSensor != null){
             mSensorManager.registerListener(self, accSensor, SensorManager.SENSOR_DELAY_FASTEST);
@@ -570,19 +526,21 @@ public class StepTrackingService extends Service
             mSensorManager.registerListener(self, stepDetectSensor, SensorManager.SENSOR_DELAY_NORMAL,0);
             numofSensors++;
         }
-        if(numofSensors >= 4){
-            isSuccess = true;
-        }
-        return isSuccess;
+        return numofSensors;
+//        if(numofSensors >= 4){
+//            isSuccess = true;
+//        }
+//        return isSuccess;
     }
 
     /**
-     * Removes location updates. Note that in this sample we merely log the
-     * {@link SecurityException}.
+     * Removes location updates. Note that the
+     * {@link SecurityException} is merely log .
      */
     public boolean removeLocationUpdates() {
         Log.i(TAG, "Removing location updates");
         boolean isSuccess;
+        boolean isFast = AppUtils.getKeyRequestingLocationUpdatesFast(self);
         try {
             mFusedLocationClient.removeLocationUpdates(mLocationCallback);
             AppUtils.setRequestingLocationUpdates(this, false);
@@ -591,6 +549,7 @@ public class StepTrackingService extends Service
             updateNotification("Counting steps");
         } catch (SecurityException unlikely) {
             AppUtils.setRequestingLocationUpdates(this, true);
+            AppUtils.setKeyRequestingLocationUpdatesFast(this,isFast);
             Log.e(TAG, "Lost location permission. Could not remove updates. " + unlikely);
             isSuccess = false;
             updateNotification("Lost location permission. Could not remove updates. " + unlikely);
@@ -600,54 +559,60 @@ public class StepTrackingService extends Service
 
 
     private void stopRecording(String inputTag){
-        mSessionFile = null;
         if (mWalkingSessionId != -1) {
-            mWalkingSession.mEndNano = SystemClock.elapsedRealtimeNanos();
+//            mWalkingSession.mEndNano = SystemClock.elapsedRealtimeNanos();
             mWalkingSession.mEndTime = System.currentTimeMillis();
-            mWalkingSession.mDuration = mWalkingSession.mEndTime - mWalkingSession.mStartTime;
+            mWalkingSession.mDuration = (mWalkingSession.mEndTime - mWalkingSession.mStartTime)/1000; //convert to seconds
             //SharedPreferences prefs = this.getSharedPreferences(PREFS_NAME, 0);
-            mWalkingSession.mStepCount = mStepsCount - stepsCountS;
+            mWalkingSession.mStepCount = mTotalStepsCount - mStepsAtStart;
             mWalkingSession.mStepDetect = mStepsDetect;
+            mWalkingSession.mDistance = mTotalDistance;
+            mWalkingSession.mAverageSpeed = mTotalDistance/mWalkingSession.mDuration;
             mStepsDetect = 0;
             mWalkingSession.mTag = inputTag;
 
             new updateSessionAsyncTask(mDB.sessionDao(),mDB.locationDao())
                     .execute(mWalkingSession);
 
-            /*Thread t = new Thread() {
-                public void run() {
-                    mDB.sessionDao().update(mWalkingSession);
-                }
-            };
-            t.start();*/
             mWalkingSessionId = -1;
+            mLastLocation = null;
+            mTotalDistance = 0f;
         }
         mSensorManager.unregisterListener(this); //unregiester motion sensors
+        mCurSensorTime = -1L;
         //Never stop step counter sensor listening
         mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY_5s);
+        mSessionFile = null;
         updateNotification( "Session not recording");
         Log.e(TAG, "Stop recording.");
     }
 
-    public void manualEndWalkingSession() {
+    public void manualStopSession() {
         Log.i(TAG, "Manually stopping sensor session.");
         if(removeLocationUpdates()){
-            mSessionStarted = false;
             if (mWalkingSessionId != -1) {
-                mWalkingSession.mEndNano = SystemClock.elapsedRealtimeNanos();
+//                mWalkingSession.mEndNano = SystemClock.elapsedRealtimeNanos();
                 mWalkingSession.mEndTime = System.currentTimeMillis();
-                mWalkingSession.mDuration = mWalkingSession.mEndTime - mWalkingSession.mStartTime;
-                mWalkingSession.mStepCount = mStepsCount - stepsCountS;
+                mWalkingSession.mDuration = (mWalkingSession.mEndTime - mWalkingSession.mStartTime)/1000;
+                mWalkingSession.mStepCount = mTotalStepsCount - mStepsAtStart;
                 mWalkingSession.mStepDetect = mStepsDetect;
+                mWalkingSession.mDistance = mTotalDistance;
+                mWalkingSession.mAverageSpeed = mTotalDistance/mWalkingSession.mDuration;
+
                 mStepsDetect = 0;
             }
             mSensorManager.unregisterListener(this); //unregiester motion sensors
-            //Never stop step counter sensor listening
+            mCurSensorTime = -1L;
             mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+            mSessionStarted = false;
+            mSessionFile = null;
+            mLastLocation = null;
+            mTotalDistance = 0f;
+
         }else {
             mSessionStarted = true;
         }
-        clearSensorOffset();
+//        clearSensorOffset();
         AppUtils.setKeyStartingWalkingSession(self,mSessionStarted);
     }
 
@@ -666,7 +631,7 @@ public class StepTrackingService extends Service
      * Returns the {@link NotificationCompat} used as part of the foreground service.
      */
     private Notification getNotification(boolean isFirstTime) {
-        String msg = "Step Counter - Counting";
+        String msg = "Counting Steps";
         if (mNotificationContentText != null) msg = mNotificationContentText;
         if (isFirstTime) {
             // PendingIntent to launch activity.
@@ -676,8 +641,7 @@ public class StepTrackingService extends Service
                     .setContentText(msg)
                     .setContentTitle(AppUtils.getLocationTitle(this))
                     .setOngoing(true)
-                    .setPriority(Notification.PRIORITY_HIGH)
-
+                    .setPriority(Notification.PRIORITY_HIGH) //TODO: check if lower priority works
                     //.setTicker(text)
                     .setWhen(System.currentTimeMillis())
                     .setAutoCancel(false)
@@ -693,18 +657,14 @@ public class StepTrackingService extends Service
         }
         // Update Step Count
         mNotificationBuilder.setSmallIcon(R.mipmap.ic_tracking); //It's a must
-        mNotificationBuilder.setContentTitle(mStepsCount + " steps taken");
-//        if (mSessionStarted) {
-//            //mNotificationBuilder.setContentText(String.format("X:%f Y:%f Z%f", mAccSample.mAccX, mAccSample.mAccY, mAccSample.mAccZ));
-//        } else {
-            mNotificationBuilder.setContentText(msg);
-//        }
+        mNotificationBuilder.setContentTitle(mTotalStepsCount + " steps taken");
+        mNotificationBuilder.setContentText(msg);
 
         return mNotificationBuilder.build();
     }
 
     private void getLastLocation() {
-        Log.w(TAG, "getting last location from onCreate");
+        //Log.w(TAG, "getting last location from onCreate");
         try {
             mFusedLocationClient.getLastLocation()
                     .addOnCompleteListener(task -> {
@@ -725,15 +685,15 @@ public class StepTrackingService extends Service
         Log.i(TAG, "New location: " + location);
 
         mCurrentLocation = location;
-        if (location.hasSpeed()) {
+        if (location.hasSpeed() && location.hasBearing()) {
             float speed = location.getSpeed();
-            if(speed == 0) {
+            if(speed <= 0) {
                 mGPSLostTimes++;
-                //if(mGPSStableTimes > 0) mGPSStableTimes--; //do not terminate immediately, no need because lost signal can control?
             }
             else {
                 mGPSLostTimes = 0;
             }
+
             if (location.getAccuracy() < GPS_ACCEPTABLE_ACCURACY) {
                 mGPSStableTimes++;
             }else {
@@ -742,79 +702,96 @@ public class StepTrackingService extends Service
 
         }else {
             mGPSLostTimes++;
-            //if(mGPSStableTimes > 0) mGPSStableTimes--; //do not terminate immediately
         }
-        if(location.getAccuracy() > 50) //TODO: define GPS accuracy radius
+        if(location.getAccuracy() > GPS_ACCURACY_THRESHOLD) {
             mGPSLostTimes++;
+        }
 
         autoSessionManagement();//check if should start automatically;
 
         if (mSessionStarted && mWalkingSessionId != -1 ) {
-            mGPSLocation = new GPSLocation();
-            mGPSLocation.GTimestamp = location.getElapsedRealtimeNanos();//location.getTime();
-            mGPSLocation.latitude = location.getLatitude();
-            mGPSLocation.longitude = location.getLongitude();
-//            mGPSLocation.provider = location.getProvider();
-            mGPSLocation.accuracy = location.getAccuracy();
+            GPSLocation gpsLocation = new GPSLocation();
+            gpsLocation.GTimestamp = location.getTime();
+            gpsLocation.latitude = location.getLatitude();
+            gpsLocation.longitude = location.getLongitude();
+//            gpsLocation.provider = location.getProvider();
+            gpsLocation.accuracy = location.getAccuracy();
             if (location.hasSpeed()){
-                mGPSLocation.speed = location.getSpeed();
+                gpsLocation.speed = location.getSpeed();
             }else {
-                mGPSLocation.speed = -1;
+                gpsLocation.speed = -1;
             }
             if(location.hasBearing()){
-                mGPSLocation.bearing = location.getBearing();
+                gpsLocation.bearing = location.getBearing();
             }else {
-                mGPSLocation.bearing = -1;
+                gpsLocation.bearing = -1;
             }
 
             Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
             Log.i(TAG,"GPS stable time:" + mGPSStableTimes);
 
-            mGPSLocation.isWalking = mIsWalking;
-            mGPSLocation.session_id = mWalkingSessionId;
-            new Thread(() -> {
-                mDB.locationDao().insert(mGPSLocation);
-                Log.w(TAG, "write GPS");
-            }).start();
+            gpsLocation.isWalking = mIsWalking;
+            gpsLocation.session_id = mWalkingSessionId;
+//            new Thread(() -> {
+//                mDB.locationDao().insert(gpsLocation);
+//                Log.w(TAG, "write GPS");
+//            }).start();
+            new insertLocationAsyncTask(mDB.locationDao()).execute(gpsLocation);
+
+            if(mLastLocation == null){
+                mLastLocation = mCurrentLocation;
+            }else{
+                //TODO: improve algorithm ####
+                if (mCurrentLocation.getAccuracy() <= GPS_ACCURACY_FOR_SUM &&
+                        mCurrentLocation.distanceTo(mLastLocation) >= mCurrentLocation.getAccuracy()/2){//GPS_DISTANCE_THRESHOLD_FOR_SUM){
+
+                    mTotalDistance += mCurrentLocation.distanceTo(mLastLocation);
+                    mLastLocation = mCurrentLocation;
+                }
+            }
         }
-//        // Notify anyone listening for broadcasts about the new location.
-//        Intent intent = new Intent(ACTION_BROADCAST);
-//        intent.putExtra(EXTRA_LOCATION, location);
-//        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
-
-        //TODO-NOTE: not location Update notification content if running as a foreground service.
-//        if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
-//            mNotificationManager.notify(NOTIFICATION_ID, getNotification(true));
-//        }
-
     }
 
     /**
-     * TODO-NOTE: Sets the location request parameters.update interval and accuracy
+     * Sets the location request parameters.update interval and accuracy
      */
     private void initLocationRequest() {
-        mLocationSlowRequest = new LocationRequest();
+        mLocationSlowRequest = new LocationRequest(); //for indoor;
         mLocationSlowRequest.setInterval(UPDATE_INTERVAL_IN_MILLISECONDS)
                 .setFastestInterval(FAST_UPDATE_INTERVAL_IN_MILLISECONDS)
-                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY); //indoor in 1 minute (60s)
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
-        mLocationFastRequest = new LocationRequest();
+        mLocationFastRequest = new LocationRequest(); //for outdoor and recording
         mLocationFastRequest.setInterval(FAST_UPDATE_INTERVAL_IN_MILLISECONDS)
-                .setFastestInterval(1) //TODO: update as fast as possible
+                .setFastestInterval(1) // update as fast as possible
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        if (mWalkingSessionId != -1 && mSessionFile.exists()) {
+        mCurSensorTime = AppUtils.elapsedTime2timestamp(sensorEvent.timestamp);
+
+        if (mWalkingSessionId != -1 &&
+                (mSessionFile != null) &&
+                mSessionFile.exists()) {
             FileOutputStream outputStream;
             String dataLine = "";
             //long systime = SystemClock.elapsedRealtimeNanos();//System.currentTimeMillis();
-            curTime = sensorEvent.timestamp;
             switch (sensorEvent.sensor.getType()) {
                 case Sensor.TYPE_STEP_DETECTOR:
-                    mStepsDetect += 1;//sensorEvent.values[0];//+= sensorEvent.values.length;
-                    dataLine = curTime + "," + mStepsDetect +"\n";
+                    mStepsDetect += 1;//+= sensorEvent.values.length;
+//                    new Thread(() -> {
+                        StepDetected stepDetected = new StepDetected();
+                        stepDetected.steps = mStepsDetect;
+                        stepDetected.timestamp = mCurSensorTime;
+//                        /**
+//                         * NOTE: in Android 8 this is considered blocking the main thread and
+//                         * writing DB in main thread is not allow.
+//                         */
+//                        mDB.stepDetectedDao().insert(stepDetected);
+//                    }).run();
+                    new insertStepAsyncTask(mDB.stepDetectedDao()).execute(stepDetected);
+                    dataLine = mCurSensorTime + "," + mStepsDetect +"\n";
                     try {
                         outputStream = new FileOutputStream(mSessionFile, true);
                         outputStream.write(dataLine.getBytes());
@@ -835,19 +812,18 @@ public class StepTrackingService extends Service
                     break;
             }
 
-            //TODO: set sensor update frequency in ms
-            ////This can't be set below 10ms due to Android/hardware limitations. Use 9 to get more accurate 10ms intervals
-            if ((curTime - lastUpdate) >= sensorRecordInterval) {
-                lastUpdate = curTime;
-                if(mCurrentLocation != null && (mCurrentLocation.getElapsedRealtimeNanos()/SECOND2NANO) == (curTime/SECOND2NANO)){//only log when there is location
-                    dataLine = curTime + "," +
+            //This is a way to have sampling frequency in file recording;
+            if ((mCurSensorTime - mLastSensorUpdate) >= sensorRecordInterval) {
+                mLastSensorUpdate = mCurSensorTime;
+                if(mCurrentLocation != null && (mCurrentLocation.getTime()/SECOND2MILLI) == (mCurSensorTime /SECOND2MILLI)){//only log when there is location
+                    dataLine = mCurSensorTime + "," +
                             accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
                             gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
                             magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," +
                             mCurrentLocation.getLatitude() + "," + mCurrentLocation.getLongitude() + "," +
                             mCurrentLocation.getAccuracy() + "," + mCurrentLocation.getSpeed() + "\n";
                 }else {
-                    dataLine = curTime + "," +
+                    dataLine = mCurSensorTime + "," +
                             accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
                             gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
                             magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," + ",,,\n";
@@ -856,7 +832,7 @@ public class StepTrackingService extends Service
                     //Log.w(TAG,"Thread starts");
                     outputStream = new FileOutputStream(mSessionFile, true);
                     outputStream.write(dataLine.getBytes());
-                    //Log.i(TAG, "write sensor data " + curTime);
+                    //Log.i(TAG, "write sensor data " + mCurSensorTime);
                     outputStream.close();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -866,34 +842,60 @@ public class StepTrackingService extends Service
         }
 
         if(sensorEvent.sensor.getType() == Sensor.TYPE_STEP_COUNTER){
-            if(AppUtils.isYesterday(mLastStepTime)){
-                //generate report
-                DailySummary dailySummary = new DailySummary();
-                dailySummary.userId = 0;
-                dailySummary.steps = 0;
-                dailySummary.mDate = DateConverter.toDate(mLastStepTime);
-                new dailyreportAsyncTask(mDB.dailySummaryDao(),mDB.sessionDao())
-                        .execute(dailySummary);
-                Log.i(TAG,"new day has come.");
+            int systemSteps = (int)sensorEvent.values[0];
+            int lastReportStep = AppUtils.getLastStepCount(self);
+            long lastReportTime = AppUtils.getLastReportTime(self);
+            mHourlyStepsOffset = AppUtils.getReportSteps(self);
+
+            if(mStepCountOffset==Integer.MIN_VALUE){
+                mStepCountOffset = systemSteps;
+                AppUtils.setStepCountOffset(self,mStepCountOffset);
             }
-            // Record Step Count
-            mStepsCount = (int)sensorEvent.values[0] - AppUtils.getStepCountOffset(this);
-            AppUtils.setKeyLastStepCount(this, mStepsCount);
-            mLastStepTime = System.currentTimeMillis();
-            Log.i(TAG, "steps: " + mStepsCount);
+            mTotalStepsCount = systemSteps - mStepCountOffset;
+
+            if(!mSessionStarted) {
+                //only record the hourly steps when there is no ongoing walking session;
+                if (AppUtils.isBeforeToday(lastReportTime)) {
+                    //generate report
+                    DailySummary dailySummary = new DailySummary();
+                    dailySummary.steps = lastReportStep;
+                    dailySummary.mDate = DateConverter.toDate(lastReportTime);
+                    new dailyreportAsyncTask(mDB.dailySummaryDao(), mDB.sessionDao())
+                            .execute(dailySummary);
+                    mStepCountOffset += lastReportStep;
+                    mTotalStepsCount = systemSteps - mStepCountOffset;
+                    AppUtils.setStepCountOffset(self, mStepCountOffset);
+                    AppUtils.setKeyLastStepCount(self, mTotalStepsCount);
+
+                    mHourlyStepsOffset = systemSteps; //maybe redundant because below logic includes this
+                    AppUtils.setKeyReportSteps(self, mHourlyStepsOffset);
+                    AppUtils.setKeyLastReportTime(self, mCurSensorTime);
+                    Log.i(TAG, "new day has come.");
+                }
+
+                if ((mCurSensorTime > lastReportTime + STEP_SAVE_INTERVAL) ||
+                        (systemSteps - mHourlyStepsOffset > STEP_SAVE_OFFSET)) {
+                    HourlySteps hourlySteps = new HourlySteps();
+                    hourlySteps.steps = systemSteps - mHourlyStepsOffset;
+                    hourlySteps.timestamp = mCurSensorTime;
+                    new saveStepAsyncTask(mDB.hourlyStepsDao()).execute(hourlySteps);
+
+                    mHourlyStepsOffset = systemSteps;
+                    AppUtils.setKeyLastReportTime(self, mCurSensorTime);
+                    AppUtils.setKeyReportSteps(self, mHourlyStepsOffset);
+                }
+            }
+
+            AppUtils.setKeyLastStepCount(this, mTotalStepsCount);
+
+            Log.i(TAG, "steps: " + mTotalStepsCount);
+            //TODO: can change below to updateNotification
             if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
                 mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
             }
             //status will be checked whenever there are steps increasing, so even when the session stopped
             // at indoor walking and the elder start to go out again walking, new session can be activated.
             autoSessionManagement();
-
-//            mDB.dailySummaryDao().getLastReportTime().observe((LifecycleOwner) self, new Observer<DailySummary>() {
-//                @Override
-//                public void onChanged(@Nullable DailySummary dailySummary) {
-//
-//                }
-//            });
         }
 
     }
@@ -912,9 +914,6 @@ public class StepTrackingService extends Service
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if(key.equals(AppUtils.KEY_REQUESTING_LOCATION_UPDATES)){
-
-        }
         if(key.equals(AppUtils.KEY_PLACE_LAT) || key.equals(AppUtils.KEY_PLACE_LON)){
             //home location changed
             mHomeCoordinate =  AppUtils.getPrefPlaceLatLng(self);
@@ -927,10 +926,13 @@ public class StepTrackingService extends Service
         if(key.equals(AppUtils.KEY_SAMPLING_FREQUENCY)){
             long freq = AppUtils.getSamplingFrequency(self);
             if(freq == 0){
-                sensorRecordInterval = SECOND2NANO/50; //default 50 hz
+                sensorRecordInterval = SECOND2MILLI/50; //default 50 hz
             }else {
-                sensorRecordInterval = SECOND2NANO/freq;
+                sensorRecordInterval = SECOND2MILLI/freq;
             }
+        }
+        if (key.equals(AppUtils.KEY_STEP_COUNT_OFFSET)){
+            mTotalStepsCount = AppUtils.getStepCountOffset(self);
         }
     }
 
@@ -945,16 +947,16 @@ public class StepTrackingService extends Service
     }
 
 
-    private static String toTransitionType(int transitionType) {
-        switch (transitionType) {
-            case ActivityTransition.ACTIVITY_TRANSITION_ENTER:
-                return "Start Walking";
-            case ActivityTransition.ACTIVITY_TRANSITION_EXIT:
-                return "Stop Walking";
-            default:
-                return "UNKNOWN";
-        }
-    }
+//    private static String toTransitionType(int transitionType) {
+//        switch (transitionType) {
+//            case ActivityTransition.ACTIVITY_TRANSITION_ENTER:
+//                return "Start Walking";
+//            case ActivityTransition.ACTIVITY_TRANSITION_EXIT:
+//                return "Stop Walking";
+//            default:
+//                return "UNKNOWN";
+//        }
+//    }
 
     /**
      * Sets up {@link ActivityTransitionRequest}'s for the sample app, and registers callbacks for them
@@ -1014,22 +1016,23 @@ public class StepTrackingService extends Service
                     for (ActivityTransitionEvent event : result.getTransitionEvents()) {
                         //private List<AccelerometerSample> mAccSamples;
                         WalkingEvent mWalkingEvent = new WalkingEvent();
-                        mWalkingEvent.WeTimestamp = SystemClock.elapsedRealtimeNanos();//System.currentTimeMillis();
+                        mWalkingEvent.WeTimestamp = System.currentTimeMillis();
                         mWalkingEvent.mTransition = event.getTransitionType();
-                        mWalkingEvent.mElapsedTime = event.getElapsedRealTimeNanos();
+                        mWalkingEvent.mElapsedTime =
+                                AppUtils.elapsedTime2timestamp(event.getElapsedRealTimeNanos());
                         //mIsWalking = mWalkingEvent.mTransition;
 //                        Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
 //                                Toast.LENGTH_LONG).show();
                         if(mWalkingEvent.mTransition == 0){
                             mIsWalking = true;
-                            mTransitionEnterTime = mWalkingEvent.mElapsedTime;//System.currentTimeMillis();
+                            mTransitionEnterTime = mWalkingEvent.mElapsedTime;
                         }
                         if (mWalkingEvent.mTransition == 1){
                             mIsWalking = false;
-                            mTransitionExitTime = mWalkingEvent.mElapsedTime;//System.currentTimeMillis();
+                            mTransitionExitTime = mWalkingEvent.mElapsedTime;
                         }
 
-                        new insertAsyncTask(mDB.walkingEventDao()).execute(mWalkingEvent);
+                        new insertEventAsyncTask(mDB.walkingEventDao()).execute(mWalkingEvent);
 
                         autoSessionManagement(); //check if need auto starting;
                     }
@@ -1038,11 +1041,11 @@ public class StepTrackingService extends Service
         }
     }
 
-    private static class insertAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
+    private static class insertEventAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
 
         private WalkingEventDao mAsyncTaskDao;
 
-        insertAsyncTask(WalkingEventDao dao) {
+        insertEventAsyncTask(WalkingEventDao dao) {
             mAsyncTaskDao = dao;
         }
 
@@ -1053,44 +1056,39 @@ public class StepTrackingService extends Service
         }
     }
 
+    private static class insertStepAsyncTask extends AsyncTask<StepDetected, Void, Void> {
 
-    private long getCurrentTimestamp(long timestamp){
-        long current = -1L;
-        if(sensorTimeRef1 == -1L && sysTimeRef1 == -1L){
-            sensorTimeRef1 = timestamp;
-            sysTimeRef1 = System.currentTimeMillis();
-        }
-        if(sysTimeRef2 == -1L && System.currentTimeMillis() - sysTimeRef1 > 0){
-            sysTimeRef2 = System.currentTimeMillis();
-            sensorTimeRef2 = timestamp;
-            rateoffset = (sensorTimeRef2 - sensorTimeRef1)/(sysTimeRef2 - sysTimeRef1);
-            rateoffset = rateoffset > 1000 ? 1000000L : 1;
-            startoffset = sysTimeRef1 - sensorTimeRef1/rateoffset;
-//            Log.e(TAG, "rate offset:" + rateoffset);
-//            Log.e(TAG, "system time delta: " + (sysTimeRef2 - sysTimeRef1));
-//            Log.e(TAG, "sensor time delta:" + (sensorTimeRef2 - sensorTimeRef1));
+        private StepDetectedDao mAsyncTaskDao;
+
+        insertStepAsyncTask(StepDetectedDao dao) {
+            mAsyncTaskDao = dao;
         }
 
-        if(startoffset > 0 && rateoffset > 0){
-            current = (timestamp - sensorTimeRef1)/rateoffset;// + sysTimeRef1;
+        @Override
+        protected Void doInBackground(StepDetected... stepDetected) {
+            mAsyncTaskDao.insert(stepDetected[0]);
+            return null;
         }
-
-        return current;
-    }
-    private void clearSensorOffset(){
-        sensorTimeRef1 = -1L;
-        sensorTimeRef2 = -1L;
-        sysTimeRef1 = -1L;
-        sysTimeRef2 = -1L;
-        rateoffset = -1L;
-        startoffset = -1L;
-        curTime = -1L;
-        lastUpdate = -1L;
     }
 
+    private static class insertLocationAsyncTask extends AsyncTask<GPSLocation, Void, Void> {
+
+        private GPSLocationDao mAsyncTaskDao;
+
+        insertLocationAsyncTask(GPSLocationDao dao) {
+            mAsyncTaskDao = dao;
+        }
+
+        @Override
+        protected Void doInBackground(GPSLocation... location) {
+            mAsyncTaskDao.insert(location[0]);
+            return null;
+        }
+    }
     private void autoSessionManagement(){
         if(!mManualMode) {
             boolean autostart = false;
+            long curSysTime = System.currentTimeMillis();
             if(mIsWalking){
                 Log.e(TAG, "Is walking");
                 Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
@@ -1101,20 +1099,20 @@ public class StepTrackingService extends Service
                 }
                 //TODO: 30 seconds or more to start walking?
                 if ((mCurrentLocation != null) &&
-                        (mCurrentLocation.getElapsedRealtimeNanos() >= mTransitionEnterTime) &&
+                        (mCurrentLocation.getTime() >= mTransitionEnterTime) &&
                         mGPSLostTimes < 4 && mGPSStableTimes > 2 &&                       //if no GPS signal, it should stop
-                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2NANO &&     //real start walking since last stopped
-                        ((SystemClock.elapsedRealtimeNanos() - mTransitionEnterTime) > (MINUTE2NANO / 2))) {
+                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2MILLI &&     //real start walking since last stopped
+                        ((curSysTime - mTransitionEnterTime) > (MINUTE2MILLI / 2))) {
                     autostart = true;
                 }
             }
             else{
                 Log.e(TAG, "Is not walking");
                 if(mTransitionEnterTime > 0 && mTransitionExitTime > 0 &&
-                        ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2NANO ||
-                        (SystemClock.elapsedRealtimeNanos() - mTransitionExitTime) < MINUTE2NANO/2)  &&
+                        ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2MILLI/3 ||
+                        (curSysTime - mTransitionExitTime) < MINUTE2MILLI/3)  &&
                         mGPSLostTimes < 4 && mGPSStableTimes > 2 ){
-                    autostart = true; //do not stop session if it is not a real stop
+                    autostart = true; //do not stop session if it is not a real stop (20s e.g. traffic light)
                 }
             }
 
@@ -1133,7 +1131,7 @@ public class StepTrackingService extends Service
                     mSessionStarted = false;
                 }
                 if(mIsWalking){
-                    if(AppUtils.requestingLocationUpdatesFast(self))
+                    if(AppUtils.getKeyRequestingLocationUpdatesFast(self))
                         //make sure whenever there is walking session, location is watched
                         requestLocationUpdates(false);
                 } else {
@@ -1142,6 +1140,11 @@ public class StepTrackingService extends Service
                     }
                 }
             }
+//        }else{ //When manual mode is on, stop all ongoing sessions??
+//            if (mSessionStarted){
+//                manualStopSession();
+//                updateSessionTag("aborted");
+//            }
         }
     }
 
@@ -1162,7 +1165,7 @@ public class StepTrackingService extends Service
             long startTime = DateConverter.toTimestamp(reportdate);
             long endTime = DateConverter.toTimestamp(reportdate) + 24*60*60*1000 - 1;
 
-            report.numWalkingSessions = 1;
+            report.numWalkingSessions = mSessionDao.getNumOfSessions(startTime, endTime);
             report.walkingduration = mSessionDao.getSumDuration(startTime, endTime);
             report.stepDetect = mSessionDao.getSumStepDetect(startTime,endTime);
             report.distance = mSessionDao.getSumDistance(startTime,endTime);
@@ -1171,7 +1174,6 @@ public class StepTrackingService extends Service
             mAsyncTaskDao.insert(report);
             return null;
         }
-
     }
 
     private static class updateSessionAsyncTask extends AsyncTask<WalkingSession, Void, Void> {
@@ -1188,11 +1190,11 @@ public class StepTrackingService extends Service
         protected Void doInBackground(WalkingSession... sessions) {
             WalkingSession thisSession = sessions[0];
 
-            thisSession.mDistance = totalDistance(thisSession.sid);
-            thisSession.mAverageSpeed = avgSpeed(thisSession.sid);
+            //thisSession.mDistance = totalDistance(thisSession.sid);
+            //thisSession.mAverageSpeed = avgSpeed(thisSession.sid);
 
             //mAsyncTaskDao.insert(walkingEvents[0]);
-            mSessionDao.update(thisSession);
+            mSessionDao.update(thisSession); //already calculated
             return null;
         }
 
@@ -1209,7 +1211,8 @@ public class StepTrackingService extends Service
                 newLocation.setLongitude(loc.longitude);
                 newLocation.setAccuracy(loc.accuracy);
                 newLocation.setSpeed(loc.speed);
-                newLocation.setElapsedRealtimeNanos(loc.GTimestamp);
+                //newLocation.setElapsedRealtimeNanos(loc.GTimestamp);
+                newLocation.setTime(loc.GTimestamp);
                 if(lastLocation.getProvider().equals("set")){
                     totalD += newLocation.distanceTo(lastLocation);
                 }
@@ -1231,5 +1234,21 @@ public class StepTrackingService extends Service
             return averageS;
         }
     }
+
+    private static class saveStepAsyncTask extends AsyncTask<HourlySteps, Void, Void> {
+
+        private HourlyStepsDao mAsyncTaskDao;
+
+        saveStepAsyncTask(HourlyStepsDao dao) {
+            mAsyncTaskDao = dao;
+        }
+
+        @Override
+        protected Void doInBackground(HourlySteps... steps) {
+            mAsyncTaskDao.insert(steps[0]);
+            return null;
+        }
+    }
+
 
 }

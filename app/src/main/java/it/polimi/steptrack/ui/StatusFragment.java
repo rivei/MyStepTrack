@@ -38,15 +38,12 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
 
     private Context mContext;
 
-    // TODO: Rename parameter arguments, choose names that match
     private static final String ARG_SESSION_STARTED = "sesssionStarted";
     // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
     private static final String ARG_HOME_LAT = "homelat";
     private static final String ARG_HOME_LON = "homelon";
 
-    private static final String ARG_MANUAL_MODE = "manual_mode";
-
-    // TODO: Rename and change types of parameters
+//    private static final String ARG_MANUAL_MODE = "manual_mode";
     private double mHomeLat;
     private double mHomeLon;
 
@@ -57,7 +54,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     private Button bnOnOff;
     //private Switch switchManual;
     private ToggleButton switchManual;
-    private TextView tvManualMode;
+//    private TextView tvManualMode;
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
@@ -145,7 +142,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
         super.onSaveInstanceState(outState);
         Bundle args = new Bundle();
         args.putBoolean(ARG_SESSION_STARTED, mSessionStarted);
-        args.putBoolean(ARG_MANUAL_MODE, mManualMode);
+//        args.putBoolean(ARG_MANUAL_MODE, mManualMode);
         outState.putAll(args);
 
         //AppUtils.setKeyManualMode(mContext,mManualMode);
@@ -175,7 +172,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
 
         tvHome.setText("Home coordinate: "+ mHomeLat + ", " + mHomeLon);
         //switchManual = rootView.findViewById(R.id.switchManual);
-        tvManualMode = rootView.findViewById(R.id.tvManualMode);
+//        tvManualMode = rootView.findViewById(R.id.tvManualMode);
         switchManual = rootView.findViewById(R.id.switchManual);
 
         switchManual.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -199,7 +196,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
 
         if (savedInstanceState != null){
             mSessionStarted = savedInstanceState.getBoolean(ARG_SESSION_STARTED);
-            mManualMode = savedInstanceState.getBoolean(ARG_MANUAL_MODE);
+//            mManualMode = savedInstanceState.getBoolean(ARG_MANUAL_MODE);
         }
         setButtonsState();
 

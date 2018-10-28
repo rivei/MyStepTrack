@@ -10,6 +10,7 @@ import it.polimi.steptrack.AppUtils;
 public class PhoneShutdownReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
+
         AppUtils.setKeyPhoneReboot(context,true);
         Log.e("PhoneShutdownReceiver", "Shutting down");
     }
