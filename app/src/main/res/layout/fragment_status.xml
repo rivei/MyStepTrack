@@ -31,24 +31,32 @@
             android:layout_height="@dimen/activity_vertical_margin" />
 
 
-        <TextView
-            android:id="@+id/tvManualMode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textStyle="bold"
-            android:text = "Manual Mode:"/>
+        <!--<TextView-->
+            <!--android:id="@+id/tvManualMode"-->
+            <!--android:layout_width="match_parent"-->
+            <!--android:layout_height="wrap_content"-->
+            <!--android:textStyle="bold"-->
+            <!--android:text = "Manual Mode:"/>-->
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
-            <ToggleButton
+
+            <Switch
                 android:id="@+id/switchManual"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textOn=""
-                android:textOff=""
-                android:background="@drawable/ic_manual_off" />
+                android:text="Manual Mode:" />
+            <!---->
+            <!--<ToggleButton-->
+                <!--android:id="@+id/switchManual"-->
+                <!--android:layout_width="wrap_content"-->
+                <!--android:layout_height="wrap_content"-->
+                <!--android:textOn=""-->
+                <!--android:textOff=""-->
+                <!--android:background="@drawable/ic_manual_off" />-->
+
             <Space
                 android:layout_width="@dimen/activity_vertical_margin"
                 android:layout_height="match_parent" />
@@ -58,6 +66,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Action"/>
+
 
         </LinearLayout>
 

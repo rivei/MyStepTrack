@@ -52,8 +52,8 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     //private int mInteractionType = 0;
 
     private Button bnOnOff;
-    //private Switch switchManual;
-    private ToggleButton switchManual;
+    private Switch switchManual;
+//    private ToggleButton switchManual;
 //    private TextView tvManualMode;
 
     @Override
@@ -73,12 +73,12 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
         if(mManualMode){
             //switchManual.setTextColor(getResources().getColor(R.color.colorButtonOn));
             //tvManualMode.setText("Manual Mode is ON");
-            switchManual.setBackgroundDrawable(getResources().getDrawable(R.drawable.ic_manual_on));
+//            switchManual.setBackgroundDrawable(getResources().getDrawable(R.drawable.ic_manual_on));
             bnOnOff.setEnabled(true);
         }else{
             //switchManual.setTextColor(getResources().getColor(R.color.colorAccent));
             //tvManualMode.setText("Manual Mode is OFF");
-            switchManual.setBackgroundDrawable(getResources().getDrawable(R.drawable.ic_manual_off));
+//            switchManual.setBackgroundDrawable(getResources().getDrawable(R.drawable.ic_manual_off));
             bnOnOff.setEnabled(false);
         }
 
@@ -141,7 +141,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         Bundle args = new Bundle();
-        args.putBoolean(ARG_SESSION_STARTED, mSessionStarted);
+//        args.putBoolean(ARG_SESSION_STARTED, mSessionStarted);
 //        args.putBoolean(ARG_MANUAL_MODE, mManualMode);
         outState.putAll(args);
 
@@ -190,14 +190,21 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             @Override
             public void onClick(View view) {
                 mListener.StatusInteraction(ON_START_CLICKED);
-                mSessionStarted = true;
+//                mSessionStarted = true;
+                mSessionStarted = AppUtils.startingWalkingSession(mContext);
+                if (mSessionStarted) {
+                    bnOnOff.setText("Stop");
+                } else {
+                    bnOnOff.setText("Start");
+                }
+
             }
         });
 
-        if (savedInstanceState != null){
-            mSessionStarted = savedInstanceState.getBoolean(ARG_SESSION_STARTED);
-//            mManualMode = savedInstanceState.getBoolean(ARG_MANUAL_MODE);
-        }
+//        if (savedInstanceState != null){
+//            mSessionStarted = savedInstanceState.getBoolean(ARG_SESSION_STARTED);
+////            mManualMode = savedInstanceState.getBoolean(ARG_MANUAL_MODE);
+//        }
         setButtonsState();
 
         return rootView;

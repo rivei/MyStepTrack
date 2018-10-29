@@ -626,7 +626,7 @@ public class MainActivity extends AppCompatActivity
                                                 mService.updateSessionTag(textTag);
                                                 //TODO: this should be done after the task finished (wait for result?)
                                                 Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
-                                                AppUtils.setKeyManualMode(self,false);
+//                                                AppUtils.setKeyManualMode(self,false);
                                             }
                                         })
                                 .setNegativeButton("Cancel",
@@ -637,18 +637,13 @@ public class MainActivity extends AppCompatActivity
                                                 mService.updateSessionTag("dumped");
                                                 dialog.cancel();
                                                 Toast.makeText(self, "Session not Saved", Toast.LENGTH_SHORT).show();
-                                                AppUtils.setKeyManualMode(self,false);
+//                                                AppUtils.setKeyManualMode(self,false);
                                             }
                                         });
                         AlertDialog setTagDialog = setTagDialogBuilder.create();
                         setTagDialog.show();
-
-//                        mService.manualStopSession();
-//                        //TODO: this should be done after the task finished (wait for result?)
-//                        Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
                     }
                 }
-                //Toast.makeText(self, "Clicked started", Toast.LENGTH_LONG).show();
                 break;
         }
     }

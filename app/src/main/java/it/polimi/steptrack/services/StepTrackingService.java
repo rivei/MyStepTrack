@@ -80,7 +80,6 @@ import static it.polimi.steptrack.AppConstants.FAST_UPDATE_INTERVAL_IN_MILLISECO
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_FOR_SUM;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_THRESHOLD;
-import static it.polimi.steptrack.AppConstants.GPS_DISTANCE_THRESHOLD_FOR_SUM;
 import static it.polimi.steptrack.AppConstants.MINUTE2MILLI;
 import static it.polimi.steptrack.AppConstants.SECOND2MILLI;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
@@ -100,6 +99,7 @@ public class StepTrackingService extends Service
      */
     private boolean mSessionStarted = false; //Activate location update and sensors listener only when session starts
     private boolean mIsWalking = false; //Start walking = 0; stop walking = 1;
+    private boolean mStepIncreasing = false;
     //private boolean mIsReported = false;
 
     private long mTransitionEnterTime = -1L;
@@ -496,7 +496,6 @@ public class StepTrackingService extends Service
 
     public void manualStartNewSession() {
         Log.i(TAG, "Requesting new walking session");
-        AppUtils.setKeyStartingWalkingSession(this, mSessionStarted);
         if(requestLocationUpdates(true)){
             mSessionStarted = true;
             startRecording();
@@ -784,6 +783,7 @@ public class StepTrackingService extends Service
                         StepDetected stepDetected = new StepDetected();
                         stepDetected.steps = mStepsDetect;
                         stepDetected.timestamp = mCurSensorTime;
+                        stepDetected.session_id = mWalkingSessionId;
 //                        /**
 //                         * NOTE: in Android 8 this is considered blocking the main thread and
 //                         * writing DB in main thread is not allow.
@@ -853,28 +853,29 @@ public class StepTrackingService extends Service
             }
             mTotalStepsCount = systemSteps - mStepCountOffset;
 
+            if (AppUtils.isBeforeToday(lastReportTime) && AppUtils.isToday(mCurSensorTime)) {
+                //generate report at the first step in the new day detected
+                DailySummary dailySummary = new DailySummary();
+                dailySummary.steps = lastReportStep;
+                dailySummary.mDate = DateConverter.toDate(lastReportTime);
+                new dailyreportAsyncTask(mDB.dailySummaryDao(), mDB.sessionDao())
+                        .execute(dailySummary);
+                mStepCountOffset += lastReportStep;
+                mTotalStepsCount = systemSteps - mStepCountOffset;
+                AppUtils.setStepCountOffset(self, mStepCountOffset);
+                AppUtils.setKeyLastStepCount(self, mTotalStepsCount);
+
+                mHourlyStepsOffset = systemSteps; //maybe redundant because below logic includes this
+                AppUtils.setKeyReportSteps(self, mHourlyStepsOffset);
+                AppUtils.setKeyLastReportTime(self, mCurSensorTime);
+                Log.i(TAG, "new day has come.");
+            }
+
             if(!mSessionStarted) {
                 //only record the hourly steps when there is no ongoing walking session;
-                if (AppUtils.isBeforeToday(lastReportTime)) {
-                    //generate report
-                    DailySummary dailySummary = new DailySummary();
-                    dailySummary.steps = lastReportStep;
-                    dailySummary.mDate = DateConverter.toDate(lastReportTime);
-                    new dailyreportAsyncTask(mDB.dailySummaryDao(), mDB.sessionDao())
-                            .execute(dailySummary);
-                    mStepCountOffset += lastReportStep;
-                    mTotalStepsCount = systemSteps - mStepCountOffset;
-                    AppUtils.setStepCountOffset(self, mStepCountOffset);
-                    AppUtils.setKeyLastStepCount(self, mTotalStepsCount);
-
-                    mHourlyStepsOffset = systemSteps; //maybe redundant because below logic includes this
-                    AppUtils.setKeyReportSteps(self, mHourlyStepsOffset);
-                    AppUtils.setKeyLastReportTime(self, mCurSensorTime);
-                    Log.i(TAG, "new day has come.");
-                }
-
                 if ((mCurSensorTime > lastReportTime + STEP_SAVE_INTERVAL) ||
                         (systemSteps - mHourlyStepsOffset > STEP_SAVE_OFFSET)) {
+
                     HourlySteps hourlySteps = new HourlySteps();
                     hourlySteps.steps = systemSteps - mHourlyStepsOffset;
                     hourlySteps.timestamp = mCurSensorTime;

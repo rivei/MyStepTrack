@@ -21,7 +21,8 @@ public final class AppConstants {
     public final static int SERVICE_RUNNING = 1;
     public final static int SERVICE_RUNNING_FOREGROUND = 2;
     public static final long STEP_SAVE_INTERVAL = 1000 * 60 * 60; //save every hour
-    public static final int STEP_SAVE_OFFSET = 50; //TODO: save to db every 50 steps;
+    public static final int STEP_SAVE_OFFSET = 50; //save ongoing step counting to db every 50 steps;
+    //continuous 50 steps defines a walking starts
 
     /**
      * For Locations

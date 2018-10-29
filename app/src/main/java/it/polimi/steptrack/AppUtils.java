@@ -339,12 +339,12 @@ public class AppUtils {
     /** TODO organized in a better way
      * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone
      */
-    public static boolean isYesterday(long timestamp){
+    public static boolean isToday(long timestamp){
         Calendar c = Calendar.getInstance();
         Calendar today = Calendar.getInstance();
         c.setTimeInMillis(timestamp);
         today.setTimeInMillis(System.currentTimeMillis());
-        if(c.get(Calendar.DATE) == (today.get(Calendar.DATE) - 1)) {
+        if(c.get(Calendar.DATE) == (today.get(Calendar.DATE))) {
             return true;
         }else{
             return false;
@@ -357,27 +357,13 @@ public class AppUtils {
         today.setTimeInMillis(System.currentTimeMillis());
         today.set(Calendar.HOUR_OF_DAY, 0);
         today.set(Calendar.MINUTE, 0);
-        today.set(Calendar.SECOND, 1);
-        today.set(Calendar.MILLISECOND, 1);
+        today.set(Calendar.SECOND, 0);
 
         if(c.before(today)){
-//        if(c.get(Calendar.DATE) <= (today.get(Calendar.DATE) - 1)) {
             return true;
         }else{
             return false;
         }
-    }
-
-
-    public static long getTomorrow() {
-        Calendar c = Calendar.getInstance();
-        c.setTimeInMillis(System.currentTimeMillis());
-        c.set(Calendar.HOUR_OF_DAY, 0);
-        c.set(Calendar.MINUTE, 0);
-        c.set(Calendar.SECOND, 1);
-        c.set(Calendar.MILLISECOND, 0);
-        c.add(Calendar.DATE, 1); //oneDay after
-        return c.getTimeInMillis();
     }
 
 
