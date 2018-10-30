@@ -24,6 +24,7 @@ public final class AppConstants {
     public static final int STEP_SAVE_OFFSET = 50; //save ongoing step counting to db every 50 steps;
     //continuous 50 steps defines a walking starts
 
+
     /**
      * For Locations
      */
