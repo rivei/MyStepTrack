@@ -80,7 +80,6 @@ import static it.polimi.steptrack.AppConstants.FAST_UPDATE_INTERVAL_IN_MILLISECO
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_FOR_SUM;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_THRESHOLD;
-import static it.polimi.steptrack.AppConstants.MINUTE2MILLI;
 import static it.polimi.steptrack.AppConstants.SECOND2MILLI;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
@@ -178,12 +177,6 @@ public class StepTrackingService extends Service
     private float[] magneticMatrix = new float[3];
 
     private long sensorRecordInterval = 0;
-//    private long sensorTimeRef1 = -1L;
-//    private long sensorTimeRef2 = -1L;
-//    private long sysTimeRef1 = -1L;
-//    private long sysTimeRef2 = -1L;
-//    private long startoffset = -1L;
-//    private long rateoffset = -1L;
     private long mCurSensorTime = -1L;
     private long mLastSensorUpdate = -1L;
     private int mTotalStepsCount = 0;
@@ -192,6 +185,8 @@ public class StepTrackingService extends Service
     private int mStepsDetect = 0;
     //private long mLastStepTime = 0L;
     private int mStepCountOffset = 0;
+    private long mLast20StepTime = 0L;
+    private int mLast20StepOffset = 0;
 
     /**
      *  for database
@@ -419,7 +414,6 @@ public class StepTrackingService extends Service
                 mFusedLocationClient.requestLocationUpdates(mLocationSlowRequest,
                         mLocationCallback, Looper.myLooper());
                 AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-                updateNotification("searching for GPS...");
             }
             isSuccess = true;
         } catch (SecurityException unlikely) {
@@ -684,16 +678,40 @@ public class StepTrackingService extends Service
         Log.i(TAG, "New location: " + location);
 
         mCurrentLocation = location;
-        if (location.hasSpeed() && location.hasBearing()) {
-            float speed = location.getSpeed();
-            if(speed <= 0) {
+        GPSLocation gpsLocation = new GPSLocation();
+        gpsLocation.GTimestamp = mCurrentLocation.getTime();
+        gpsLocation.latitude = mCurrentLocation.getLatitude();
+        gpsLocation.longitude = mCurrentLocation.getLongitude();
+        gpsLocation.provider = mCurrentLocation.getProvider();
+        gpsLocation.accuracy = mCurrentLocation.getAccuracy();
+        if (mCurrentLocation.hasSpeed()){
+            gpsLocation.speed = mCurrentLocation.getSpeed();
+        }else {
+            gpsLocation.speed = -1;
+        }
+        if(mCurrentLocation.hasBearing()){
+            gpsLocation.bearing = mCurrentLocation.getBearing();
+        }else {
+            gpsLocation.bearing = -1;
+        }
+
+        gpsLocation.isWalking = mIsWalking;
+        gpsLocation.session_id = mWalkingSessionId;
+//            new Thread(() -> {
+//                mDB.locationDao().insert(gpsLocation);
+//                Log.w(TAG, "write GPS");
+//            }).start();
+        new insertLocationAsyncTask(mDB.locationDao()).execute(gpsLocation);
+
+        if (mCurrentLocation.hasSpeed() && mCurrentLocation.hasBearing()) {
+            if(mCurrentLocation.getSpeed() <= 0) {
                 mGPSLostTimes++;
             }
             else {
                 mGPSLostTimes = 0;
             }
 
-            if (location.getAccuracy() < GPS_ACCEPTABLE_ACCURACY) {
+            if (mCurrentLocation.getAccuracy() < GPS_ACCEPTABLE_ACCURACY) {
                 mGPSStableTimes++;
             }else {
                 if(mGPSStableTimes > 0) mGPSStableTimes--;
@@ -702,46 +720,24 @@ public class StepTrackingService extends Service
         }else {
             mGPSLostTimes++;
         }
-        if(location.getAccuracy() > GPS_ACCURACY_THRESHOLD) {
+        if(mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD) {
             mGPSLostTimes++;
         }
+
+        Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
+        Log.i(TAG,"GPS stable time:" + mGPSStableTimes);
+
 
         autoSessionManagement();//check if should start automatically;
 
         if (mSessionStarted && mWalkingSessionId != -1 ) {
-            GPSLocation gpsLocation = new GPSLocation();
-            gpsLocation.GTimestamp = location.getTime();
-            gpsLocation.latitude = location.getLatitude();
-            gpsLocation.longitude = location.getLongitude();
-//            gpsLocation.provider = location.getProvider();
-            gpsLocation.accuracy = location.getAccuracy();
-            if (location.hasSpeed()){
-                gpsLocation.speed = location.getSpeed();
-            }else {
-                gpsLocation.speed = -1;
-            }
-            if(location.hasBearing()){
-                gpsLocation.bearing = location.getBearing();
-            }else {
-                gpsLocation.bearing = -1;
-            }
-
-            Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
-            Log.i(TAG,"GPS stable time:" + mGPSStableTimes);
-
-            gpsLocation.isWalking = mIsWalking;
-            gpsLocation.session_id = mWalkingSessionId;
-//            new Thread(() -> {
-//                mDB.locationDao().insert(gpsLocation);
-//                Log.w(TAG, "write GPS");
-//            }).start();
-            new insertLocationAsyncTask(mDB.locationDao()).execute(gpsLocation);
 
             if(mLastLocation == null){
                 mLastLocation = mCurrentLocation;
             }else{
                 //TODO: improve algorithm ####
                 if (mCurrentLocation.getAccuracy() <= GPS_ACCURACY_FOR_SUM &&
+                        mCurrentLocation.hasSpeed() &&
                         mCurrentLocation.distanceTo(mLastLocation) >= mCurrentLocation.getAccuracy()/2){//GPS_DISTANCE_THRESHOLD_FOR_SUM){
 
                     mTotalDistance += mCurrentLocation.distanceTo(mLastLocation);
@@ -846,6 +842,28 @@ public class StepTrackingService extends Service
             int lastReportStep = AppUtils.getLastStepCount(self);
             long lastReportTime = AppUtils.getLastReportTime(self);
             mHourlyStepsOffset = AppUtils.getReportSteps(self);
+            if(mLast20StepOffset == 0){
+                mLast20StepOffset = systemSteps;
+                mLast20StepTime = mCurSensorTime;
+            }else {
+                int stepDiff = systemSteps - mLast20StepOffset;
+                long timeDiff = mCurSensorTime - mLast20StepTime;
+                float ratio = 0;
+                if (stepDiff!=0) ratio = timeDiff/stepDiff;
+                Log.i(TAG,"timeDiff: " + timeDiff);
+                Log.i(TAG,"stepDiff: " + stepDiff);
+                Log.e(TAG, "ratio: " + ratio);
+                if ((stepDiff >= 20 || timeDiff >= 20 * SECOND2MILLI)){
+                    if(ratio < 750 && ratio > 450) {
+                        mStepIncreasing = true;
+                    }
+                    else {
+                        mStepIncreasing = false;
+                    }
+                    mLast20StepOffset = systemSteps;
+                    mLast20StepTime = mCurSensorTime;
+                }
+            }
 
             if(mStepCountOffset==Integer.MIN_VALUE){
                 mStepCountOffset = systemSteps;
@@ -858,7 +876,7 @@ public class StepTrackingService extends Service
                 DailySummary dailySummary = new DailySummary();
                 dailySummary.steps = lastReportStep;
                 dailySummary.mDate = DateConverter.toDate(lastReportTime);
-                new dailyreportAsyncTask(mDB.dailySummaryDao(), mDB.sessionDao())
+                new dailyReportAsyncTask(mDB.dailySummaryDao(), mDB.sessionDao())
                         .execute(dailySummary);
                 mStepCountOffset += lastReportStep;
                 mTotalStepsCount = systemSteps - mStepCountOffset;
@@ -889,7 +907,7 @@ public class StepTrackingService extends Service
 
             AppUtils.setKeyLastStepCount(this, mTotalStepsCount);
 
-            Log.i(TAG, "steps: " + mTotalStepsCount);
+            Log.i(TAG, "Total steps: " + mTotalStepsCount);
             //TODO: can change below to updateNotification
             if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
                 mNotificationManager.notify(NOTIFICATION_ID, getNotification(false));
@@ -1090,32 +1108,39 @@ public class StepTrackingService extends Service
         if(!mManualMode) {
             boolean autostart = false;
             long curSysTime = System.currentTimeMillis();
-            if(mIsWalking){
+            if(mStepIncreasing){//mIsWalking){
                 Log.e(TAG, "Is walking");
                 Log.i(TAG,"GPS Lost time:" + mGPSLostTimes);
                 Log.i(TAG,"GPS stable time:" + mGPSStableTimes);
                 if(!AppUtils.requestingLocationUpdates(self)) {
                     getLastLocation();
                     requestLocationUpdates(false); //slow update
+                    updateNotification("Walking detected, searching for GPS...");
                 }
-                //TODO: 30 seconds or more to start walking?
+                // 30 seconds or more to start walking?
                 if ((mCurrentLocation != null) &&
-                        (mCurrentLocation.getTime() >= mTransitionEnterTime) &&
-                        mGPSLostTimes < 4 && mGPSStableTimes > 2 &&                       //if no GPS signal, it should stop
-                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2MILLI &&     //real start walking since last stopped
-                        ((curSysTime - mTransitionEnterTime) > (MINUTE2MILLI / 2))) {
+//                        (mCurrentLocation.getTime() >= mTransitionEnterTime) &&                       //if no GPS signal, it should stop
+//                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2MILLI &&     //real start walking since last stopped
+//                        ((curSysTime - mTransitionEnterTime) > (MINUTE2MILLI / 2)) &&
+                        mGPSLostTimes < 4 && mGPSStableTimes > 2) {
                     autostart = true;
                 }
-            }
-            else{
-                Log.e(TAG, "Is not walking");
-                if(mTransitionEnterTime > 0 && mTransitionExitTime > 0 &&
-                        ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2MILLI/3 ||
-                        (curSysTime - mTransitionExitTime) < MINUTE2MILLI/3)  &&
-                        mGPSLostTimes < 4 && mGPSStableTimes > 2 ){
-                    autostart = true; //do not stop session if it is not a real stop (20s e.g. traffic light)
+                if(curSysTime - mLast20StepTime > 30 * SECOND2MILLI){
+                    mStepIncreasing = false;
+                    mLast20StepOffset = 0;
+                    mLast20StepTime = 0L;
+                    autostart = false;
                 }
             }
+//            else{
+//                Log.e(TAG, "Is not walking");
+//                if(mTransitionEnterTime > 0 && mTransitionExitTime > 0 &&
+//                        ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2MILLI/3 ||
+//                        (curSysTime - mTransitionExitTime) < MINUTE2MILLI/3)  &&
+//                        mGPSLostTimes < 4 && mGPSStableTimes > 2 ){
+//                    autostart = true; //do not stop session if it is not a real stop (20s e.g. traffic light)
+//                }
+//            }
 
             if(autostart){
                 Log.e(TAG, "auto running session");
@@ -1131,7 +1156,7 @@ public class StepTrackingService extends Service
                     mGPSStableTimes = 0;
                     mSessionStarted = false;
                 }
-                if(mIsWalking){
+                if(mStepIncreasing){//mIsWalking){
                     if(AppUtils.getKeyRequestingLocationUpdatesFast(self))
                         //make sure whenever there is walking session, location is watched
                         requestLocationUpdates(false);
@@ -1149,12 +1174,12 @@ public class StepTrackingService extends Service
         }
     }
 
-    private static class dailyreportAsyncTask extends AsyncTask<DailySummary, Void, Void> {
+    private static class dailyReportAsyncTask extends AsyncTask<DailySummary, Void, Void> {
 
         private DailySummaryDao mAsyncTaskDao;
         private WalkingSessionDao mSessionDao;
 
-        dailyreportAsyncTask(DailySummaryDao dDao, WalkingSessionDao sDao) {
+        dailyReportAsyncTask(DailySummaryDao dDao, WalkingSessionDao sDao) {
             mAsyncTaskDao = dDao;
             mSessionDao = sDao;
         }

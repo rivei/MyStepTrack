@@ -21,10 +21,10 @@ public interface GPSLocationDao
     @Query("DELETE FROM locations")
     void deleteAll();
 
-    @Query("SELECT * from locations ORDER BY session_id ASC")
+    @Query("SELECT * from locations ORDER BY GTimestamp ASC")
     LiveData<List<GPSLocation>> getAllLocation();
 
-    @Query("SELECT * from locations ORDER BY session_id ASC")
+    @Query("SELECT * from locations ORDER BY GTimestamp ASC")
     List<GPSLocation> getAllLocationSynchronous();
 
     @Query("SELECT * from locations WHERE session_id = :sid ORDER BY GTimestamp ASC")

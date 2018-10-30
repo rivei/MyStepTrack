@@ -47,7 +47,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     private double mHomeLat;
     private double mHomeLon;
 
-    private boolean mSessionStarted = false;
+//    private boolean mSessionStarted = false;
     private boolean mManualMode;// = false;
     //private int mInteractionType = 0;
 
@@ -59,7 +59,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
         if (s.equals(AppUtils.KEY_STARTING_WALKING_SESSION)) {
-            mSessionStarted = AppUtils.startingWalkingSession(mContext);
+//            mSessionStarted = AppUtils.startingWalkingSession(mContext);
             setButtonsState();
         }
         if(s.equals(AppUtils.KEY_MANUAL_MODE)){
@@ -82,7 +82,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             bnOnOff.setEnabled(false);
         }
 
-        if (mSessionStarted) {
+        if (AppUtils.startingWalkingSession(mContext)) {
             bnOnOff.setText("Stop");
         } else {
             bnOnOff.setText("Start");
@@ -157,7 +157,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
 
         }
         if (mContext != null){
-            mSessionStarted = AppUtils.startingWalkingSession(mContext);
+//            mSessionStarted = AppUtils.startingWalkingSession(mContext);
             mManualMode = AppUtils.getKeyMandualMode(mContext);
         }
     }
@@ -191,8 +191,8 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             public void onClick(View view) {
                 mListener.StatusInteraction(ON_START_CLICKED);
 //                mSessionStarted = true;
-                mSessionStarted = AppUtils.startingWalkingSession(mContext);
-                if (mSessionStarted) {
+//                mSessionStarted = AppUtils.startingWalkingSession(mContext);
+                if (AppUtils.startingWalkingSession(mContext)) {
                     bnOnOff.setText("Stop");
                 } else {
                     bnOnOff.setText("Start");

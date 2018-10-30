@@ -365,7 +365,29 @@ public class AppUtils {
             return false;
         }
     }
-
+    public static long getDateStart(long timestamp){
+        if(timestamp > 0) {
+            Calendar c = Calendar.getInstance();
+            c.setTimeInMillis(timestamp);
+            c.set(Calendar.HOUR_OF_DAY, 0);
+            c.set(Calendar.MINUTE, 0);
+            c.set(Calendar.SECOND, 0);
+            c.set(Calendar.MILLISECOND, 0);
+            return c.getTimeInMillis();
+            //            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+//            String dateInString = c.get(Calendar.DAY_OF_MONTH) + "/" +
+//                    c.get(Calendar.MONTH) + "/" +
+//                    c.get(Calendar.YEAR);
+//            try {
+//                return sdf.parse(dateInString);
+//            } catch (ParseException e) {
+//                e.printStackTrace();
+//                return null;
+//            }
+        }else {
+            return timestamp;
+        }
+    }
 
     /**
      * For activity detection
