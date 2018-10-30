@@ -32,6 +32,8 @@ public final class AppConstants {
     public static final long UPDATE_INTERVAL_IN_MILLISECONDS = 20000; //20s
     //The fastest rate for active location updates. Updates will never be more frequent than this value.
     public static final long FAST_UPDATE_INTERVAL_IN_MILLISECONDS = 5000;//2000; //2s
+    public static final float UPDATE_DISTANCE_IN_METERS = 5f;
+
 //            UPDATE_INTERVAL_IN_MILLISECONDS / 2; //5s
     public static final float GPS_ACCEPTABLE_ACCURACY = 25f;  //TODO: define GPS accuracy radius
     public static final float GPS_ACCURACY_THRESHOLD = 50f;
