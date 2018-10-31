@@ -92,7 +92,7 @@ import static it.polimi.steptrack.AppConstants.SECOND2MILLI;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
-import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
+//import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 import static it.polimi.steptrack.AppConstants.UPDATE_INTERVAL_IN_MILLISECONDS;
 
 public class StepTrackingService extends Service
@@ -110,8 +110,8 @@ public class StepTrackingService extends Service
     private boolean mStepIncreasing = false;
     //private boolean mIsReported = false;
 
-    private long mTransitionEnterTime = -1L;
-    private long mTransitionExitTime = -1L;
+//    private long mTransitionEnterTime = -1L;
+//    private long mTransitionExitTime = -1L;
     private boolean mOutofHome = false; //TODO: radius greater than threshold (30 meters + accuracy).
     private boolean mManualMode = false; //when manual mode is true, walking session doesn't depends on other things;
     private int mGPSLostTimes = 0;
@@ -464,7 +464,6 @@ public class StepTrackingService extends Service
         Log.i(TAG, "Requesting location updates:" + fastUpdate);
 //        AppUtils.setRequestingLocationUpdates(this, true);
 //        try {
-//            //TODO: locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, new MyLocationListener());
 //            mFusedLocationClient.removeLocationUpdates(mLocationCallback);
 //            if(fastUpdate) {
 //                mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
@@ -497,19 +496,20 @@ public class StepTrackingService extends Service
             // for ActivityCompat#requestPermissions for more details.
             isSuccess = false;
         }else {
+            AppUtils.setRequestingLocationUpdates(this, true);
             if(fastUpdate) {
                 mLocationManager.removeUpdates(mLocationListener);
-                mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                        UPDATE_INTERVAL_IN_MILLISECONDS/4, UPDATE_DISTANCE_IN_METERS, mLocationListener);
+//                mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+//                        UPDATE_INTERVAL_IN_MILLISECONDS/4, 0, mLocationListener);
                 mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                        FAST_UPDATE_INTERVAL_IN_MILLISECONDS, UPDATE_DISTANCE_IN_METERS, mLocationListener);
+                        FAST_UPDATE_INTERVAL_IN_MILLISECONDS, 0, mLocationListener);
+                AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
             }else {
                 mLocationManager.removeUpdates(mLocationListener);
                 mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                        UPDATE_INTERVAL_IN_MILLISECONDS, UPDATE_DISTANCE_IN_METERS, mLocationListener);
+                        UPDATE_INTERVAL_IN_MILLISECONDS, 0, mLocationListener);
                 mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                        UPDATE_INTERVAL_IN_MILLISECONDS, UPDATE_DISTANCE_IN_METERS, mLocationListener);
-                updateNotification("searching for GPS...");
+                        UPDATE_INTERVAL_IN_MILLISECONDS, 0, mLocationListener);
             }
 
             isSuccess = true;
@@ -644,7 +644,6 @@ public class StepTrackingService extends Service
         mLocationManager.removeUpdates(mLocationListener);
         AppUtils.setRequestingLocationUpdates(this, false);
         AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-
         return true;
     }
 
@@ -847,7 +846,7 @@ public class StepTrackingService extends Service
             gpsLocation.bearing = -1;
         }
 
-        gpsLocation.isWalking = mIsWalking;
+        gpsLocation.isWalking = mStepIncreasing;//mIsWalking;
         gpsLocation.session_id = mWalkingSessionId;
         new insertLocationAsyncTask(mDB.locationDao()).execute(gpsLocation);
 
@@ -1272,11 +1271,12 @@ public class StepTrackingService extends Service
                 if(!AppUtils.requestingLocationUpdates(self)) {
 //                    getLastLocation();
                     requestLocationUpdates(false); //slow update
+                    updateNotification("Walking detected. Searching for GPS...");
                 }
                 //TODO: 30 seconds or more to start walking?
                 if ((mCurrentLocation != null) &&
-                        mCurrentLocation.getProvider().equals(LocationManager.GPS_PROVIDER) &&
-                        mGPSLostTimes < 5 && mGPSStableTimes > 2 ){//&&                       //if no GPS signal, it should stop
+                        mCurrentLocation.getProvider().equals(LocationManager.GPS_PROVIDER) ){//&&
+//                        mGPSLostTimes < 5 && mGPSStableTimes > 2 ){//&&                       //if no GPS signal, it should stop
 //                        (mCurrentLocation.getTime() >= mTransitionEnterTime) &&
 //                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2MILLI &&     //real start walking since last stopped
 //                        ((curSysTime - mTransitionEnterTime) > (MINUTE2MILLI / 2))) {
@@ -1316,8 +1316,10 @@ public class StepTrackingService extends Service
                 Log.e(TAG, "auto stop session");
                 if (mSessionStarted) {
                     stopRecording("auto");
-                    mGPSStableTimes = 0;
                     mSessionStarted = false;
+                    mGPSLostTimes = 0;
+                    mGPSStableTimes = 0;
+                    updateNotification("Session record stopped");
                 }
                 if(mStepIncreasing){
                     if(AppUtils.getKeyRequestingLocationUpdatesFast(self))
@@ -1327,7 +1329,9 @@ public class StepTrackingService extends Service
                     if(AppUtils.requestingLocationUpdates(self)) {
                         removeLocationUpdates();
                         mLast20StepOffset = 0;
-                        mLast20StepTime = 0L;                    }
+                        mLast20StepTime = 0L;
+                        updateNotification("Counting steps");
+                    }
                 }
 
                 Log.i(TAG,"Is step increasing:"+ mStepIncreasing);
