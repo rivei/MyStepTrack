@@ -1,8 +1,6 @@
 package it.polimi.steptrack.ui;
 
 import android.content.Context;
-import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
@@ -69,12 +67,12 @@ public class WelcomeFragment extends Fragment {
         mContext = rootView.getContext();
 
         tvSteps = rootView.findViewById(R.id.tvSteps);
-        LatLng coordinate = AppUtils.getPrefPlaceLatLng(mContext);
-        if(coordinate != null) {
-            tvSteps.setText("Home is" + coordinate.toString());
-        }else{
-            tvSteps.setText("Home address unknown");
-        }
+//        LatLng coordinate = AppUtils.getPrefPlaceLocation(mContext);
+//        if(coordinate != null) {
+//            tvSteps.setText("Home is" + coordinate.toString());
+//        }else{
+//            tvSteps.setText("Home address unknown");
+//        }
         // Inflate the layout for this fragment
         return rootView;//inflater.inflate(R.layout.fragment_welcome, container, false);
     }

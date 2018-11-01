@@ -296,9 +296,9 @@ public class AppUtils {
     public static final String KEY_PLACE_LON = "place_lon";
 
     //Save chosen place
-    public static void setPrefPlace(Context context, Place place){
+    public static void setPrefPlaceCoordinate(Context context, double lat, double lon){
         //SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
-        if (place == null) {
+        if (lat == 0 && lon == 0) {
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit().remove(KEY_PLACE_LAT).apply();
             PreferenceManager.getDefaultSharedPreferences(context)
@@ -306,29 +306,31 @@ public class AppUtils {
         } else {
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit()
-                    .putLong(KEY_PLACE_LAT,Double.doubleToRawLongBits(place.getLatLng().latitude))
+                    .putLong(KEY_PLACE_LAT,Double.doubleToRawLongBits(lat))
                     .apply();
 
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit()
-                    .putLong(KEY_PLACE_LON,Double.doubleToRawLongBits(place.getLatLng().longitude))
+                    .putLong(KEY_PLACE_LON,Double.doubleToRawLongBits(lon))
                     .apply();
             Toast.makeText(context, "Place pref set", Toast.LENGTH_LONG).show();
         }
     }
 
-    public static LatLng getPrefPlaceLatLng(Context context){
+    public static Location getPrefPlaceLocation(Context context){
         //SharedPreferences sharedPreferences = context.getSharedPreferences(PREFS_NAME,0);//PreferenceManager.getDefaultSharedPreferences(context);
         Double lat = Double.longBitsToDouble(PreferenceManager.getDefaultSharedPreferences(context)
                 .getLong(KEY_PLACE_LAT, 0));
         Double lon = Double.longBitsToDouble(PreferenceManager.getDefaultSharedPreferences(context)
                 .getLong(KEY_PLACE_LON, 0));
 
-        LatLng latLng = null;
+        Location location = new Location("null");
         if( lat!=0 && lon !=0 ){
-            latLng = new LatLng(lat,lon);
+            location.setProvider("home");
+            location.setLatitude(lat);
+            location.setLongitude(lon);
         }
-        return latLng;
+        return location;
     }
 
     /* Checks if external storage is available for read and write */

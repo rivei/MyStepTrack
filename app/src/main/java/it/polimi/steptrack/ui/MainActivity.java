@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -22,6 +23,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AlertDialog;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -37,6 +39,8 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.location.places.Place;
@@ -135,8 +139,9 @@ public class MainActivity extends AppCompatActivity
         }
 
         //TODO: Check if address is set, if not popup place picking dialog
-        LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
-        if (latLng == null){
+//        LatLng latLng = AppUtils.getPrefPlaceLocation(self);
+        Location location = AppUtils.getPrefPlaceLocation(self);
+        if (location.getProvider().equals("null")){
             Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
             PickHomeAddress();
         }
@@ -197,14 +202,15 @@ public class MainActivity extends AppCompatActivity
         FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
         if (id == R.id.nav_camera) {
             // update the main content by replacing fragments
-            LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
-            if (latLng == null){
+//            LatLng latLng = AppUtils.getPrefPlaceLocation(self);
+            Location location = AppUtils.getPrefPlaceLocation(self);
+            if (location.getProvider().equals("null")){
                 Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
                 PickHomeAddress();
                 return false;
             }
 //            if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
-                fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+                fragment = StatusFragment.newInstance(location.getLatitude(), location.getLongitude());
 
                 fragmentTransaction.replace(R.id.fragment_container, fragment, StatusFragment.TAG);
 //                fragmentTransaction.addToBackStack(StatusFragment.TAG);
@@ -280,8 +286,9 @@ public class MainActivity extends AppCompatActivity
                 Context.BIND_AUTO_CREATE);//TODO NOTE: activates the onCreate of service and
         //TODO NOTE: the foreground mode only works when this is put in onStart
 
-        LatLng latLng = AppUtils.getPrefPlaceLatLng(self);
-        if (latLng == null){
+//        LatLng latLng = AppUtils.getPrefPlaceLocation(self);
+        Location location = AppUtils.getPrefPlaceLocation(self);
+        if (location.getProvider().equals("null")){
             Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
             PickHomeAddress();
             //return false;
@@ -296,7 +303,7 @@ public class MainActivity extends AppCompatActivity
             StatusFragment fragment;
             FragmentManager fragmentManager = getSupportFragmentManager();
             if (fragmentManager.findFragmentByTag(StatusFragment.TAG) == null) {
-                fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
+                fragment = StatusFragment.newInstance(location.getLatitude(), location.getLongitude());
                 fragmentManager.beginTransaction()
                         .add(R.id.fragment_container, fragment, StatusFragment.TAG)
                         //.replace(R.id.fragment_container, fragment, StatusFragment.TAG)
@@ -312,16 +319,56 @@ public class MainActivity extends AppCompatActivity
             Toast.makeText(this, getString(R.string.permission_rationale), Toast.LENGTH_LONG).show();
             return;
         }
-        try {
-            // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
-            // when a place is selected or with the user cancels.
-            PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
-            //Intent i = builder.build(this);
-            startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
-        } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
-            Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
-        } catch (Exception e) {
-            Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(self) == ConnectionResult.SUCCESS) {
+            try {
+                // Start a new Activity for the Place Picker API, this will trigger {@code #onActivityResult}
+                // when a place is selected or with the user cancels.
+                PlacePicker.IntentBuilder builder = new PlacePicker.IntentBuilder();
+                //Intent i = builder.build(this);
+                startActivityForResult(builder.build(MainActivity.this), PLACE_PICKER_REQUEST);
+            } catch (GooglePlayServicesRepairableException | GooglePlayServicesNotAvailableException e) {
+                    Log.e(TAG, String.format("GooglePlayServices Not Available [%s]", e.getMessage()));
+            } catch (Exception e) {
+                Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
+            }
+        }else {
+            Location location = AppUtils.getPrefPlaceLocation(self);
+            if(location.getProvider().equals("null")) {
+                /**
+                 * Pop up dialog
+                 */
+                //String final textTag;
+                View setTagView = LayoutInflater.from(self).inflate(R.layout.dialog_home_location, null);
+                AlertDialog.Builder setTagDialogBuilder = new AlertDialog.Builder(self);
+                setTagDialogBuilder.setView(setTagView);
+                EditText editLat = setTagView.findViewById(R.id.editLat);
+                EditText editLon = setTagView.findViewById(R.id.editLon);
+                setTagDialogBuilder.setCancelable(false)
+                        .setPositiveButton("Save",
+                                new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        String strLat = editLat.getText().toString();
+                                        if (TextUtils.isEmpty(strLat)) {
+                                            editLat.setError("Latitude should not be empty");
+                                            return;
+                                        }
+                                        String strlon = editLon.getText().toString();
+                                        if (TextUtils.isEmpty(strlon)) {
+                                            editLon.setError("Longitude  should not be empty");
+                                            return;
+                                        }
+                                        Log.e(TAG,"Lat: " + strLat + ", " + Double.parseDouble(strLat));
+                                        Log.e(TAG,"Lon: " + strlon + ", " + Double.parseDouble(strlon));
+                                        AppUtils.setPrefPlaceCoordinate(self, Double.parseDouble(strLat), Double.parseDouble(strlon));
+                                        Log.e(TAG, "Location: " + AppUtils.getPrefPlaceLocation(self));
+                                        Toast.makeText(self, "Location Saved", Toast.LENGTH_SHORT).show();
+                                        //                                                AppUtils.setKeyManualMode(self,false);
+                                    }
+                                });
+                AlertDialog setTagDialog = setTagDialogBuilder.create();
+                setTagDialog.show();
+            }
         }
     }
 
@@ -374,8 +421,8 @@ public class MainActivity extends AppCompatActivity
                 Log.i(TAG, "No place selected");
                 return;
             }
-            AppUtils.setPrefPlace(self,place);
             LatLng latLng = place.getLatLng();
+            AppUtils.setPrefPlaceCoordinate(self,latLng.latitude, latLng.longitude);
             StatusFragment fragment;
             fragment = StatusFragment.newInstance(latLng.latitude, latLng.longitude);
             FragmentManager fragmentManager = getSupportFragmentManager();

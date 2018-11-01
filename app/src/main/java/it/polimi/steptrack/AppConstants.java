@@ -28,13 +28,15 @@ public final class AppConstants {
     /**
      * For Locations
      */
+    public static final float OUT_OF_HOME_DISTANCE = 100f; //100m
     // The desired interval for location updates. Inexact. Updates may be more or less frequent.
-    public static final long UPDATE_INTERVAL_IN_MILLISECONDS = 10000; //10s
+    public static final long NETWORK_UPDATE_INTERVAL = 20000; //20s
+    public static final long GPS_UPDATE_INTERVAL = 10000; //10s
     //The fastest rate for active location updates. Updates will never be more frequent than this value.
-    public static final long FAST_UPDATE_INTERVAL_IN_MILLISECONDS = 3000;//2000; //2s
+    public static final long GPS_FAST_UPDATE_INTERVAL = 2500;//2000; //2s
 //    public static final float UPDATE_DISTANCE_IN_METERS = 5f;
 
-//            UPDATE_INTERVAL_IN_MILLISECONDS / 2; //5s
+//            GPS_UPDATE_INTERVAL / 2; //5s
     public static final float GPS_ACCEPTABLE_ACCURACY = 25f;  //TODO: define GPS accuracy radius
     public static final float GPS_ACCURACY_THRESHOLD = 50f;
     public static final float GPS_ACCURACY_FOR_SUM = 10f;     //only points within this accuracy will be counted

@@ -21,7 +21,7 @@ public interface WalkingSessionDao {
     @Query("DELETE FROM sessions")
     void deleteAll();
 
-    @Query("SELECT * from sessions ORDER BY start_time DESC")
+    @Query("SELECT * from sessions WHERE distance > 0 ORDER BY start_time DESC")
     LiveData<List<WalkingSession>> getAllSessions();
 
     @Query("SELECT * from sessions ORDER BY start_time ASC")
