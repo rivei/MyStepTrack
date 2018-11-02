@@ -138,13 +138,13 @@ public class MainActivity extends AppCompatActivity
             requestPermissions();
         }
 
-        //TODO: Check if address is set, if not popup place picking dialog
+        // Check if address is set, if not popup place picking dialog
 //        LatLng latLng = AppUtils.getPrefPlaceLocation(self);
-        Location location = AppUtils.getPrefPlaceLocation(self);
-        if (location.getProvider().equals("null")){
-            Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
-            PickHomeAddress();
-        }
+//        Location location = AppUtils.getPrefPlaceLocation(self);
+//        if (location.getProvider().equals("null")){
+//            Toast.makeText(self,"No home address recorded. Please select Home location", Toast.LENGTH_LONG).show();
+//            PickHomeAddress();
+//        }
         //StatusFragment fragment = StatusFragment.newInstance(45.482134, 9.224853);
 //        getSupportFragmentManager().beginTransaction()
 //                .add(R.id.fragment_container, fragment, StatusFragment.TAG).commit();
@@ -332,8 +332,8 @@ public class MainActivity extends AppCompatActivity
                 Log.e(TAG, String.format("PlacePicker Exception: %s", e.getMessage()));
             }
         }else {
-            Location location = AppUtils.getPrefPlaceLocation(self);
-            if(location.getProvider().equals("null")) {
+//            Location location = AppUtils.getPrefPlaceLocation(self);
+//            if(location.getProvider().equals("null")) {
                 /**
                  * Pop up dialog
                  */
@@ -368,7 +368,7 @@ public class MainActivity extends AppCompatActivity
                                 });
                 AlertDialog setTagDialog = setTagDialogBuilder.create();
                 setTagDialog.show();
-            }
+//            }
         }
     }
 

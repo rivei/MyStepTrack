@@ -24,7 +24,7 @@ public interface GPSLocationDao
     @Query("SELECT * from locations ORDER BY GTimestamp ASC")
     LiveData<List<GPSLocation>> getAllLocation();
 
-    @Query("SELECT * from locations ORDER BY GTimestamp ASC")
+    @Query("SELECT * from locations ORDER BY GTimestamp DESC")
     List<GPSLocation> getAllLocationSynchronous();
 
     @Query("SELECT * from locations WHERE session_id = :sid ORDER BY GTimestamp ASC")

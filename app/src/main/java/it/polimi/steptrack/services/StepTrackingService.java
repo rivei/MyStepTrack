@@ -28,6 +28,7 @@ import android.os.Environment;
 //import android.os.HandlerThread;
 import android.os.IBinder;
 //import android.os.Looper;
+import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
@@ -55,6 +56,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -88,6 +90,7 @@ import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
 //import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 import static it.polimi.steptrack.AppConstants.GPS_UPDATE_INTERVAL;
+import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 
 public class StepTrackingService extends Service
         implements SensorEventListener, SharedPreferences.OnSharedPreferenceChangeListener {
@@ -193,8 +196,26 @@ public class StepTrackingService extends Service
     private int mStepsAtStart = 0;
     private int mStepsDetect = 0;
     private int mStepCountOffset = 0;
-    private long mLast20StepTime = 0L;
-    private int mLast20StepOffset = 0;
+//    private long mLast20StepTime = 0L;
+//    private int mLast20StepOffset = 0;
+    private class StepsCounted{
+        private int stepsOffset;
+        private long timestamp;
+
+        public StepsCounted(int numSteps, long timestamp) {
+            this.stepsOffset = numSteps;
+            this.timestamp = timestamp;
+        }
+
+        public int getStepsOffset() {
+            return stepsOffset;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
+        }
+    }
+    ArrayList<StepsCounted> arrSteps = new ArrayList<>();
 
     /**
      *  for database
@@ -227,67 +248,46 @@ public class StepTrackingService extends Service
         // Define a listener that responds to location updates
         mLocationListener = new LocationListener() {
             public void onLocationChanged(Location location) {
-                // Called when a new location is found by the network location provider.
+                // Called when a new location is found by the location provider.
                 onNewLocation(location);
             }
 
             public void onStatusChanged(String provider, int status, Bundle extras) {
-                if(!provider.equals(LocationManager.GPS_PROVIDER)) return;
+                Log.i(TAG,"Location status changed.");
                 /* This is called when the GPS status alters */
                 switch (status) {
-                    case LocationProvider.OUT_OF_SERVICE:
-                        Log.v(TAG, "Status Changed: Out of Service");
-//                        Toast.makeText(self, "Status Changed: Out of Service",
-//                                Toast.LENGTH_SHORT).show();
+                case LocationProvider.OUT_OF_SERVICE:
+                    Log.v(TAG, "Status Changed: Out of Service");
+                    if(provider.equals(LocationManager.GPS_PROVIDER)) {
                         mGPSStableTimes = 0;
                         mGPSLostTimes++;
-                        break;
-                    case LocationProvider.TEMPORARILY_UNAVAILABLE:
-                        Log.v(TAG, "Status Changed: Temporarily Unavailable");
-//                        Toast.makeText(self, "Status Changed: Temporarily Unavailable",
-//                                Toast.LENGTH_SHORT).show();
-                        if(mGPSStableTimes>0) mGPSStableTimes--;
-                        break;
-                    case LocationProvider.AVAILABLE:
-                        Log.v(TAG, "Status Changed: Available");
-//                        Toast.makeText(self, "Status Changed: Available",
-//                                Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+                case LocationProvider.TEMPORARILY_UNAVAILABLE:
+                    Log.v(TAG, "Status Changed: Temporarily Unavailable");
+                    if(provider.equals(LocationManager.GPS_PROVIDER)) {
+                        mGPSLostTimes++;
+                        mGPSStableTimes = 0;
+                    }
+                    break;
+                case LocationProvider.AVAILABLE:
+                    Log.v(TAG, "Status Changed: Available");
+                    if(provider.equals(LocationManager.GPS_PROVIDER)) {
                         mGPSLostTimes = 0;
-                        break;
+                    }
+                    break;
                 }
                 autoSessionManagement();
             }
 
             public void onProviderEnabled(String provider) {
+                Log.i(TAG,"Provider Enabled." + provider);
             }
 
             public void onProviderDisabled(String provider) {
-                mGPSStableTimes = 0;
-                autoSessionManagement();
+                Log.i(TAG,"Provider Disabled." + provider);
             }
         };
-
-
-//        /**
-//         * setup fused location client and call back
-//         */
-//        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-//
-//        mLocationCallback = new LocationCallback() {
-//            @Override
-//            public void onLocationResult(LocationResult locationResult) {
-//                super.onLocationResult(locationResult);
-//                onNewLocation(locationResult.getLastLocation());
-//            }
-//        };
-//
-//        initLocationRequest(); //for location request when walking is detected.
-
-
-//        HandlerThread handlerThread = new HandlerThread(TAG);
-//        handlerThread.start();
-//        mServiceHandler = new Handler(handlerThread.getLooper());
-        //***HandlerThread needs to call myHandlerThread.quit() to free the resources and stop the execution of the thread.
 
         mManualMode = AppUtils.getKeyMandualMode(self);
 
@@ -335,14 +335,6 @@ public class StepTrackingService extends Service
             // Set the Notification Channel for the Notification Manager.
             mNotificationManager.createNotificationChannel(mChannel);
         }
-
-//        /**
-//         * Activity Detection
-//         */
-//        Intent intent = new Intent(AppConstants.TRANSITIONS_RECEIVER_ACTION);
-//        mPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
-//        mTransitionsReceiver = new TransitionsReceiver();
-//        registerReceiver(mTransitionsReceiver, new IntentFilter(AppConstants.TRANSITIONS_RECEIVER_ACTION));
 
         /**
          * Setup File path for tracking records
@@ -451,63 +443,48 @@ public class StepTrackingService extends Service
         super.onDestroy();
     }
 
-    /**
-     * Makes a request for location updates. Note that the
-     * {@link SecurityException} is merely log.
-     */
-
     public boolean requestLocationUpdates(boolean fastUpdate) {
         boolean isSuccess;
         Log.i(TAG, "Requesting location updates:" + fastUpdate);
-//        AppUtils.setRequestingLocationUpdates(this, true);
-//        try {
-//            mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-//            if(fastUpdate) {
-//                mFusedLocationClient.requestLocationUpdates(mLocationFastRequest,
-//                        mLocationCallback, Looper.myLooper());
-//                AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
-//            }else {
-//                mFusedLocationClient.requestLocationUpdates(mLocationSlowRequest,
-//                        mLocationCallback, Looper.myLooper());
-//                AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-//                updateNotification("searching for GPS...");
-//            }
-//            isSuccess = true;
-//        } catch (SecurityException unlikely) {
-//            AppUtils.setRequestingLocationUpdates(this, false);
-//            AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-//            Log.e(TAG, "Lost location permission. Could not request updates. " + unlikely);
-//            isSuccess = false;
-//            updateNotification("Lost location permission. Could not request updates. " + unlikely);
-//        }
-
         // Register the listener with the Location Manager to receive location updates
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
             isSuccess = false;
         }else {
-            AppUtils.setRequestingLocationUpdates(this, true);
-            if(fastUpdate) {
+            if (mLocationManager != null && mLocationManager != null &&
+                    AppUtils.requestingLocationUpdates(self)) {
                 mLocationManager.removeUpdates(mLocationListener);
-                mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                        GPS_FAST_UPDATE_INTERVAL, 0, mLocationListener);
-                AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
-            }else {
-                mLocationManager.removeUpdates(mLocationListener);
-                mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                        NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
-                mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                        GPS_UPDATE_INTERVAL, 0, mLocationListener);
+                AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
+                AppUtils.setRequestingLocationUpdates(this, false);
             }
-
-            isSuccess = true;
+            if(fastUpdate) {
+                try {
+                    mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+                            NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
+                    mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                            GPS_FAST_UPDATE_INTERVAL, 0, mLocationListener);//, Looper.getMainLooper());
+                    AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
+                    AppUtils.setRequestingLocationUpdates(this, true);
+                    isSuccess = true;
+                }catch (Exception e){
+                    isSuccess = false;
+                    Log.e(TAG, "Location could not request updates. " + e);
+                    updateNotification("Location could not request updates. " + e);
+                }
+            }else {
+                try {
+                    mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+                            NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
+                    mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                            GPS_UPDATE_INTERVAL, 0, mLocationListener);
+                    AppUtils.setRequestingLocationUpdates(this, true);
+                    isSuccess = true;
+                }catch (Exception e){
+                    isSuccess = false;
+                    Log.e(TAG, "Location could not request updates. " + e);
+                    updateNotification("Location could not request updates. " + e);
+                }
+            }
         }
         return isSuccess;
     }
@@ -515,7 +492,6 @@ public class StepTrackingService extends Service
     private void startRecording(){
         mWalkingSession = new WalkingSession();
         mWalkingSession.mStartTime = System.currentTimeMillis();
-//        mWalkingSession.mStartNano = SystemClock.elapsedRealtimeNanos();
         mStepsAtStart = mTotalStepsCount;
         mTotalDistance = 0f;
 
@@ -541,11 +517,8 @@ public class StepTrackingService extends Service
                     }
                 }
                 FileOutputStream outputStream;
-//                String sessionInfo = "StartTimestamp," + mWalkingSession.mStartTime +
-//                        ",StartInNano," + mWalkingSession.mStartNano + "\n"; //elapsed time problem solved;
                 try {
                     outputStream = new FileOutputStream(mSessionFile);
-//                    outputStream.write(sessionInfo.getBytes());
                     outputStream.write(sessionHeader.getBytes()); //write header
                     outputStream.close();
                 } catch (FileNotFoundException e) {
@@ -563,6 +536,7 @@ public class StepTrackingService extends Service
         if (numofSensors > 0) {
             if (numofSensors < 4){
                 Toast.makeText(this, "some sensor not compatible!", Toast.LENGTH_LONG).show();
+                Log.w(TAG, "some sensor not compatible!");
             }
             Log.i(TAG, "Start recording");
             Toast.makeText(this, "Starts session", Toast.LENGTH_SHORT).show();
@@ -606,118 +580,17 @@ public class StepTrackingService extends Service
             numofSensors++;
         }
         return numofSensors;
-//        if(numofSensors >= 4){
-//            isSuccess = true;
-//        }
-//        return isSuccess;
     }
 
-    /**
-     * Removes location updates. Note that the
-     * {@link SecurityException} is merely log .
-     */
+
     public boolean removeLocationUpdates() {
         Log.i(TAG, "Removing location updates");
-//        boolean isSuccess;
-//        boolean isFast = AppUtils.getKeyRequestingLocationUpdatesFast(self);
-//        try {
-//            mFusedLocationClient.removeLocationUpdates(mLocationCallback);
-//            AppUtils.setRequestingLocationUpdates(this, false);
-//            AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-//            isSuccess = true;
-//            updateNotification("Counting steps");
-//        } catch (SecurityException unlikely) {
-//            AppUtils.setRequestingLocationUpdates(this, true);
-//            AppUtils.setKeyRequestingLocationUpdatesFast(this,isFast);
-//            Log.e(TAG, "Lost location permission. Could not remove updates. " + unlikely);
-//            isSuccess = false;
-//            updateNotification("Lost location permission. Could not remove updates. " + unlikely);
-//        }
-//        return isSuccess;
 
-        // Remove the listener you previously added
         mLocationManager.removeUpdates(mLocationListener);
         AppUtils.setRequestingLocationUpdates(this, false);
         AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
         return true;
     }
-
-    private boolean isGPSstable(){
-        if (mCurrentLocation.getProvider().equals(LocationManager.GPS_PROVIDER)){
-            if (mCurrentLocation.hasSpeed() &&
-                    mCurrentLocation.getSpeed() > 0 &&
-                    mCurrentLocation.getAccuracy() < GPS_ACCEPTABLE_ACCURACY){
-
-                mGPSStableTimes++;
-                mGPSLostTimes = 0;
-            }
-            if (mCurrentLocation.getAccuracy() < GPS_ACCURACY_THRESHOLD ||
-                    (!mCurrentLocation.hasBearing() && !mCurrentLocation.hasSpeed())) {
-                if (mGPSStableTimes > 0) mGPSStableTimes--;
-            }
-        }else {
-            mGPSLostTimes++;
-        }
-
-        if (mGPSLostTimes < 3 && mGPSStableTimes > 2) //GPS signal lost for < 40s and stable signal > 20s
-            return true;
-        else
-            return false;
-    }
-    /** Determines whether one Location reading is better than the current Location fix
-     * @param location  The new Location that you want to evaluate
-     * @param currentBestLocation  The current Location fix, to which you want to compare the new one
-     */
-    protected boolean isBetterLocation(Location location, Location currentBestLocation) {
-        if (currentBestLocation == null) {
-            // A new location is always better than no location
-            return true;
-        }
-
-        // Check whether the new location fix is newer or older
-        long timeDelta = location.getTime() - currentBestLocation.getTime();
-        boolean isSignificantlyNewer = timeDelta > MINUTE2MILLI *2;
-        boolean isSignificantlyOlder = timeDelta < -MINUTE2MILLI *2;
-        boolean isNewer = timeDelta > 0;
-
-        // If it's been more than two minutes since the current location, use the new location
-        // because the user has likely moved
-        if (isSignificantlyNewer) {
-            return true;
-            // If the new location is more than two minutes older, it must be worse
-        } else if (isSignificantlyOlder) {
-            return false;
-        }
-
-        // Check whether the new location fix is more or less accurate
-        int accuracyDelta = (int) (location.getAccuracy() - currentBestLocation.getAccuracy());
-        boolean isLessAccurate = accuracyDelta > 0;
-        boolean isMoreAccurate = accuracyDelta < 0;
-        boolean isSignificantlyLessAccurate = accuracyDelta > 200;
-
-        // Check if the old and new location are from the same provider
-        boolean isFromSameProvider = isSameProvider(location.getProvider(),
-                currentBestLocation.getProvider());
-
-        // Determine location quality using a combination of timeliness and accuracy
-        if (isMoreAccurate) {
-            return true;
-        } else if (isNewer && !isLessAccurate) {
-            return true;
-        } else if (isNewer && !isSignificantlyLessAccurate && isFromSameProvider) {
-            return true;
-        }
-        return false;
-    }
-
-    /** Checks whether two providers are the same */
-    private boolean isSameProvider(String provider1, String provider2) {
-        if (provider1 == null) {
-            return provider2 == null;
-        }
-        return provider1.equals(provider2);
-    }
-
 
     private void stopRecording(String inputTag){
         if (mWalkingSessionId != -1) {
@@ -764,7 +637,7 @@ public class StepTrackingService extends Service
             }
             mSensorManager.unregisterListener(this); //unregiester motion sensors
             mCurSensorTime = -1L;
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY_5s);
             mSessionStarted = false;
             mSessionFile = null;
             mLastLocation = null;
@@ -824,41 +697,22 @@ public class StepTrackingService extends Service
         return mNotificationBuilder.build();
     }
 
-//    private void getLastLocation() {
-//        //Log.w(TAG, "getting last location from onCreate");
-//        try {
-//            mFusedLocationClient.getLastLocation()
-//                    .addOnCompleteListener(task -> {
-//                        if (task.isSuccessful() && task.getResult() != null) {
-//                            mCurrentLocation = task.getResult();
-//
-//                            //Log.w(TAG, "The inital location: " + mCurrentLocation);
-//                        } else {
-//                            Log.w(TAG, "Failed to get location.");
-//                        }
-//                    });
-//        } catch (SecurityException unlikely) {
-//            Log.e(TAG, "Lost location permission." + unlikely);
-//        }
-//    }
-
     private void onNewLocation(Location location) {
         Log.i(TAG, "New location: " + location);
 
-        mCurrentLocation = location;
         GPSLocation gpsLocation = new GPSLocation();
-        gpsLocation.GTimestamp = mCurrentLocation.getTime();
-        gpsLocation.latitude = mCurrentLocation.getLatitude();
-        gpsLocation.longitude = mCurrentLocation.getLongitude();
-        gpsLocation.accuracy = mCurrentLocation.getAccuracy();
-        gpsLocation.provider = mCurrentLocation.getProvider();
-        if (mCurrentLocation.hasSpeed()){
-            gpsLocation.speed = mCurrentLocation.getSpeed();
+        gpsLocation.GTimestamp = location.getTime();
+        gpsLocation.latitude = location.getLatitude();
+        gpsLocation.longitude = location.getLongitude();
+        gpsLocation.accuracy = location.getAccuracy();
+        gpsLocation.provider = location.getProvider();
+        if (location.hasSpeed()){
+            gpsLocation.speed = location.getSpeed();
         }else {
             gpsLocation.speed = -1;
         }
-        if(mCurrentLocation.hasBearing()){
-            gpsLocation.bearing = mCurrentLocation.getBearing();
+        if(location.hasBearing()){
+            gpsLocation.bearing = location.getBearing();
         }else {
             gpsLocation.bearing = -1;
         }
@@ -867,62 +721,55 @@ public class StepTrackingService extends Service
         gpsLocation.session_id = mWalkingSessionId;
         new insertLocationAsyncTask(mDB.locationDao()).execute(gpsLocation);
 
-        if (mCurrentLocation.distanceTo(mHomeLocation) +
-                mCurrentLocation.getAccuracy() > OUT_OF_HOME_DISTANCE){
-            mOutofHome = true;
-        }
-        else {
-            mOutofHome = false;
-        }
-
-        if (mCurrentLocation.getProvider().equals(LocationManager.GPS_PROVIDER)){
+        if (location.getProvider().equals(LocationManager.GPS_PROVIDER)){
+            mCurrentLocation = location;
+            mGPSLostTimes = 0;
             if (mCurrentLocation.hasSpeed() &&
                     mCurrentLocation.getSpeed() > 0 &&
                     mCurrentLocation.getAccuracy() < GPS_ACCEPTABLE_ACCURACY){
-
+                Log.i(TAG, "GPS stable +1");
                 mGPSStableTimes++;
-                mGPSLostTimes = 0;
             }
-            if (mCurrentLocation.getAccuracy() < GPS_ACCURACY_THRESHOLD ||
+            if (mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD ||
                     (!mCurrentLocation.hasBearing() && !mCurrentLocation.hasSpeed())) {
                 if (mGPSStableTimes > 0) mGPSStableTimes--;
+                Log.i(TAG,"GPS stable -1");
             }
-        }else {
-            mGPSLostTimes++;
-        }
 
-        autoSessionManagement();//check if should start automatically;
+            if (mCurrentLocation.distanceTo(mHomeLocation) -
+                    mCurrentLocation.getAccuracy() > OUT_OF_HOME_DISTANCE){
+                mOutofHome = true;
+            }
+            else {
+                mOutofHome = false;
+            }
 
-        if (mSessionStarted && mWalkingSessionId != -1 ) {
-            if(mLastLocation == null){
-                mLastLocation = mCurrentLocation;
-            }else{
-                //TODO: improve algorithm ####
-                if (mCurrentLocation.getAccuracy() <= GPS_ACCURACY_FOR_SUM &&
-                        mCurrentLocation.distanceTo(mLastLocation) >= mCurrentLocation.getAccuracy()/2 && //GPS_DISTANCE_THRESHOLD_FOR_SUM)
-                        mCurrentLocation.getSpeed() > 0){
+            autoSessionManagement();//check if should start automatically;
 
-                    mTotalDistance += mCurrentLocation.distanceTo(mLastLocation);
+            if (mSessionStarted && mWalkingSessionId != -1 ) {
+                if(mLastLocation == null){
                     mLastLocation = mCurrentLocation;
+                }else{
+                    //TODO: improve algorithm ####
+                    if (mCurrentLocation.getAccuracy() <= GPS_ACCURACY_FOR_SUM &&
+                            mCurrentLocation.distanceTo(mLastLocation) >= mCurrentLocation.getAccuracy() && //GPS_DISTANCE_THRESHOLD_FOR_SUM)
+                            mCurrentLocation.getSpeed() > 0){
+
+                        mTotalDistance += mCurrentLocation.distanceTo(mLastLocation);
+                        mLastLocation = mCurrentLocation;
+                    }
                 }
             }
+
+        }else {
+            if (mCurrentLocation != null &&
+                    (location.getTime() - mCurrentLocation.getTime() > 30 * SECOND2MILLI)) {
+                mGPSLostTimes++;
+                mGPSStableTimes = 0;
+            }
+            autoSessionManagement(); //be able to stop!!!!
         }
     }
-
-//    /**
-//     * Sets the location request parameters.update interval and accuracy
-//     */
-//    private void initLocationRequest() {
-//        mLocationSlowRequest = new LocationRequest(); //for indoor;
-//        mLocationSlowRequest.setInterval(GPS_UPDATE_INTERVAL)
-//                .setFastestInterval(GPS_FAST_UPDATE_INTERVAL)
-//                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-//
-//        mLocationFastRequest = new LocationRequest(); //for outdoor and recording
-//        mLocationFastRequest.setInterval(GPS_FAST_UPDATE_INTERVAL)
-//                .setFastestInterval(1) // update as fast as possible
-//                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-//    }
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
@@ -1004,29 +851,31 @@ public class StepTrackingService extends Service
             int lastReportStep = AppUtils.getLastStepCount(self);
             long lastReportTime = AppUtils.getLastReportTime(self);
             mHourlyStepsOffset = AppUtils.getReportSteps(self);
-            if(mLast20StepOffset == 0){
-                mLast20StepOffset = systemSteps;
-                mLast20StepTime = mCurSensorTime;
-            }else {
-                int stepDiff = systemSteps - mLast20StepOffset;
-                long timeDiff = mCurSensorTime - mLast20StepTime;
-                double ratio = 0;
-                if(stepDiff != 0) ratio = timeDiff/stepDiff;
-                Log.i(TAG,"timeDiff: " + timeDiff);
-                Log.i(TAG,"stepDiff: " + stepDiff);
-                Log.e(TAG, "ratio: " + ratio);
 
-                if ((stepDiff >= 15 || timeDiff >= 10 * SECOND2MILLI)){
-                    if(ratio < 750 && ratio > 450) {
-                        mStepIncreasing = true;
+            if (!arrSteps.isEmpty()){
+                long lastStepsTime = arrSteps.get(arrSteps.size()-1).getTimestamp();
+                if (mCurSensorTime - lastStepsTime > 2 * BATCH_LATENCY_5s){ //10 second without step increasing
+                    mStepIncreasing = false;
+                    arrSteps.clear();
+                }else {
+                    int stepSum = systemSteps - arrSteps.get(0).getStepsOffset();
+                    long stepDur = mCurSensorTime - arrSteps.get(0).getTimestamp();
+//                    Log.i(TAG,"timeDiff: " + stepDur);
+//                    Log.i(TAG,"stepDiff: " + stepSum);
+//                    Log.i(TAG, "array size: " + arrSteps.size());
+                    if(stepSum >= 20 && stepDur > 0) {
+                        double ratio = stepDur / stepSum;
+                        if ( ratio > 400 && ratio < 900 ) {
+                            mStepIncreasing = true;
+                        }
+                        arrSteps.remove(0); //always remove the first one
                     }
-                    else {
-                        mStepIncreasing = false;
-                    }
-                    mLast20StepOffset = systemSteps;
-                    mLast20StepTime = mCurSensorTime;
                 }
+            }else {
+                mStepIncreasing = false;
             }
+
+            arrSteps.add(new StepsCounted(systemSteps,mCurSensorTime));
 
             if(mStepCountOffset==Integer.MIN_VALUE){
                 mStepCountOffset = systemSteps;
@@ -1128,116 +977,6 @@ public class StepTrackingService extends Service
         }
     }
 
-
-//    private static String toTransitionType(int transitionType) {
-//        switch (transitionType) {
-//            case ActivityTransition.ACTIVITY_TRANSITION_ENTER:
-//                return "Start Walking";
-//            case ActivityTransition.ACTIVITY_TRANSITION_EXIT:
-//                return "Stop Walking";
-//            default:
-//                return "UNKNOWN";
-//        }
-//    }
-
-//    /**
-//     * Sets up {@link ActivityTransitionRequest}'s for the sample app, and registers callbacks for them
-//     * with a custom {@link BroadcastReceiver}
-//     */
-//    private void setupActivityTransitions() {
-//        List<ActivityTransition> transitions = new ArrayList<>();
-//        transitions.add(
-//                new ActivityTransition.Builder()
-//                        .setActivityType(DetectedActivity.WALKING)
-//                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-//                        .build());
-//        transitions.add(
-//                new ActivityTransition.Builder()
-//                        .setActivityType(DetectedActivity.WALKING)
-//                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
-//                        .build());
-//        ActivityTransitionRequest request = new ActivityTransitionRequest(transitions);
-//
-//        // Register for Transitions Updates.
-//        Task<Void> task =
-//                ActivityRecognition.getClient(this)
-//                        .requestActivityTransitionUpdates(request, mPendingIntent);
-//        task.addOnSuccessListener(
-//                new OnSuccessListener<Void>() {
-//                    @Override
-//                    public void onSuccess(Void result) {
-//                        Log.i(TAG, "Transitions Api was successfully registered.");
-//                    }
-//                });
-//        task.addOnFailureListener(
-//                new OnFailureListener() {
-//                    @Override
-//                    public void onFailure(Exception e) {
-//                        Log.e(TAG, "Transitions Api could not be registered: " + e);
-//                    }
-//                });
-//    }
-//
-//    /**
-//     * A basic BroadcastReceiver to handle intents from from the Transitions API.
-//     */
-//    public class TransitionsReceiver extends BroadcastReceiver {
-//        @Override
-//        public void onReceive(Context context, Intent intent) {
-//            if (!TextUtils.equals(AppConstants.TRANSITIONS_RECEIVER_ACTION, intent.getAction())) {
-////                mLogFragment.getLogView()
-////                        .println("Received an unsupported action in TransitionsReceiver: action="
-////                                + intent.getAction());
-//                Toast.makeText(context, "Received an unsupported action in TransitionsReceiver: action="
-//                        + intent.getAction(), Toast.LENGTH_LONG).show();
-//                return;
-//            }
-//            if (ActivityTransitionResult.hasResult(intent)) {
-//                ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
-//                if (result != null) {
-//                    for (ActivityTransitionEvent event : result.getTransitionEvents()) {
-//                        //private List<AccelerometerSample> mAccSamples;
-//                        WalkingEvent mWalkingEvent = new WalkingEvent();
-//                        mWalkingEvent.WeTimestamp = System.currentTimeMillis();
-//                        mWalkingEvent.mTransition = event.getTransitionType();
-//                        mWalkingEvent.mElapsedTime =
-//                                AppUtils.elapsedTime2timestamp(event.getElapsedRealTimeNanos());
-//                        //mIsWalking = mWalkingEvent.mTransition;
-////                        Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
-////                                Toast.LENGTH_LONG).show();
-//                        if(mWalkingEvent.mTransition == 0){
-//                            mIsWalking = true;
-//                            mTransitionEnterTime = mWalkingEvent.mElapsedTime;
-//                        }
-//                        if (mWalkingEvent.mTransition == 1){
-//                            mIsWalking = false;
-//                            mTransitionExitTime = mWalkingEvent.mElapsedTime;
-//                        }
-//
-//                        new insertEventAsyncTask(mDB.walkingEventDao()).execute(mWalkingEvent);
-//
-//                        autoSessionManagement(); //check if need auto starting;
-//                    }
-//                }
-//            }
-//        }
-//    }
-//
-//    private static class insertEventAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
-//
-//        private WalkingEventDao mAsyncTaskDao;
-//
-//        insertEventAsyncTask(WalkingEventDao dao) {
-//            mAsyncTaskDao = dao;
-//        }
-//
-//        @Override
-//        protected Void doInBackground(WalkingEvent... walkingEvents) {
-//            mAsyncTaskDao.insert(walkingEvents[0]);
-//            return null;
-//        }
-//    }
-
     private static class insertStepAsyncTask extends AsyncTask<StepDetected, Void, Void> {
 
         private StepDetectedDao mAsyncTaskDao;
@@ -1284,36 +1023,18 @@ public class StepTrackingService extends Service
                 //TODO: 30 seconds or more to start walking?
                 if (mOutofHome &&
                         (mCurrentLocation != null) &&
-//                        isGPSstable()){
-//                        mCurrentLocation.getProvider().equals(LocationManager.GPS_PROVIDER) ){//&&
-                        mGPSLostTimes < 4 && mGPSStableTimes > 2 ){//&&                       //if no GPS signal, it should stop
-//                        (mCurrentLocation.getTime() >= mTransitionEnterTime) &&
-//                        (mTransitionEnterTime - mTransitionExitTime) > MINUTE2MILLI &&     //real start walking since last stopped
-//                        ((curSysTime - mTransitionEnterTime) > (MINUTE2MILLI / 2))) {
+                        (System.currentTimeMillis() - mCurrentLocation.getTime() < 30 * SECOND2MILLI) &&
+                        mGPSLostTimes < 4 && mGPSStableTimes > 1 ){//&&                       //if no GPS signal, it should stop
+
                     autostart = true;
                 }
-                if(curSysTime - mLast20StepTime > 30 * SECOND2MILLI){
+                if (!arrSteps.isEmpty() &&
+                        (curSysTime - arrSteps.get(arrSteps.size()-1).getTimestamp() > 30 * SECOND2MILLI)){ //30 second without step increasing
                     mStepIncreasing = false;
-                    mLast20StepOffset = 0;
-                    mLast20StepTime = 0L;
+                    arrSteps.clear();
                     autostart = false;
                 }
             }
-//            else{
-//                Log.e(TAG, "Is not walking");
-//                if(mTransitionEnterTime > 0 && mTransitionExitTime > 0 &&
-//                        ((mTransitionExitTime - mTransitionEnterTime) < MINUTE2MILLI/3 ||
-//                        (curSysTime - mTransitionExitTime) < MINUTE2MILLI/3)  &&
-//                        mGPSLostTimes < 5 && mGPSStableTimes > 1 ){
-//                    autostart = true; //do not stop session if it is not a real stop (20s e.g. traffic light)
-//                }
-//                if(curSysTime - mLast20StepTime > 30 * SECOND2MILLI){
-//                    mStepIncreasing = false;
-//                    mLast20StepOffset = 0;
-//                    mLast20StepTime = 0L;
-//                    autostart = false;
-//                }
-//            }
 
 
             if(autostart){
@@ -1339,8 +1060,7 @@ public class StepTrackingService extends Service
                 } else {
                     if(AppUtils.requestingLocationUpdates(self)) {
                         removeLocationUpdates();
-                        mLast20StepOffset = 0;
-                        mLast20StepTime = 0L;
+                        arrSteps.clear();
                         updateNotification("Counting steps");
                     }
                 }
