@@ -285,6 +285,11 @@ public class StepTrackingService extends Service
             }
 
             public void onProviderDisabled(String provider) {
+                if(provider.equals(LocationManager.GPS_PROVIDER)) {
+                    mGPSLostTimes++;
+                    mGPSStableTimes = 0;
+                    autoSessionManagement();
+                }
                 Log.i(TAG,"Provider Disabled." + provider);
             }
         };
@@ -468,6 +473,8 @@ public class StepTrackingService extends Service
                     isSuccess = true;
                 }catch (Exception e){
                     isSuccess = false;
+                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
+                    AppUtils.setRequestingLocationUpdates(this, false);
                     Log.e(TAG, "Location could not request updates. " + e);
                     updateNotification("Location could not request updates. " + e);
                 }
@@ -478,9 +485,12 @@ public class StepTrackingService extends Service
                     mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
                             GPS_UPDATE_INTERVAL, 0, mLocationListener);
                     AppUtils.setRequestingLocationUpdates(this, true);
+                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
                     isSuccess = true;
                 }catch (Exception e){
                     isSuccess = false;
+                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
+                    AppUtils.setRequestingLocationUpdates(this, false);
                     Log.e(TAG, "Location could not request updates. " + e);
                     updateNotification("Location could not request updates. " + e);
                 }
@@ -601,7 +611,11 @@ public class StepTrackingService extends Service
             mWalkingSession.mStepCount = mTotalStepsCount - mStepsAtStart;
             mWalkingSession.mStepDetect = mStepsDetect;
             mWalkingSession.mDistance = mTotalDistance;
-            mWalkingSession.mAverageSpeed = mTotalDistance/mWalkingSession.mDuration;
+            if(mWalkingSession.mDuration > 0)
+                mWalkingSession.mAverageSpeed = mTotalDistance/mWalkingSession.mDuration;
+            else
+                mWalkingSession.mAverageSpeed = 0;
+
             mStepsDetect = 0;
             mWalkingSession.mTag = inputTag;
 
@@ -631,7 +645,10 @@ public class StepTrackingService extends Service
                 mWalkingSession.mStepCount = mTotalStepsCount - mStepsAtStart;
                 mWalkingSession.mStepDetect = mStepsDetect;
                 mWalkingSession.mDistance = mTotalDistance;
-                mWalkingSession.mAverageSpeed = mTotalDistance/mWalkingSession.mDuration;
+                if(mWalkingSession.mDuration > 0)
+                    mWalkingSession.mAverageSpeed = mTotalDistance/mWalkingSession.mDuration;
+                else
+                    mWalkingSession.mAverageSpeed = 0;
 
                 mStepsDetect = 0;
             }
@@ -731,9 +748,14 @@ public class StepTrackingService extends Service
                 mGPSStableTimes++;
             }
             if (mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD ||
-                    (!mCurrentLocation.hasBearing() && !mCurrentLocation.hasSpeed())) {
+                    !mCurrentLocation.hasBearing() || !mCurrentLocation.hasSpeed()){
+
                 if (mGPSStableTimes > 0) mGPSStableTimes--;
                 Log.i(TAG,"GPS stable -1");
+            }
+            if(!mCurrentLocation.hasBearing() && !mCurrentLocation.hasSpeed()) {
+                mGPSLostTimes++;
+                mGPSStableTimes=0;
             }
 
             if (mCurrentLocation.distanceTo(mHomeLocation) -
