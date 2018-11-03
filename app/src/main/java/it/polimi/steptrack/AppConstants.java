@@ -21,7 +21,7 @@ public final class AppConstants {
     public final static int SERVICE_RUNNING = 1;
     public final static int SERVICE_RUNNING_FOREGROUND = 2;
     public static final long STEP_SAVE_INTERVAL = 1000 * 60 * 60; //save every hour
-    public static final int STEP_SAVE_OFFSET = 50; //save ongoing step counting to db every 50 steps;
+    public static final int STEP_SAVE_OFFSET = 100; //save ongoing step counting to db every 50 steps;
     //continuous 50 steps defines a walking starts
 
 
@@ -37,7 +37,7 @@ public final class AppConstants {
     public static final float UPDATE_DISTANCE_IN_METERS = 3f;
 
     public static final float GPS_ACCEPTABLE_ACCURACY = 50f;  //TODO: define GPS accuracy radius
-    public static final float GPS_ACCURACY_THRESHOLD = 50f;
+    public static final float GPS_ACCURACY_THRESHOLD = 80f;
     public static final float GPS_ACCURACY_FOR_SUM = 10f;     //only points within this accuracy will be counted
     public static final float GPS_DISTANCE_THRESHOLD_FOR_SUM = GPS_ACCURACY_FOR_SUM/2;         //only sum when the distance between 2 points are bigger than this
 

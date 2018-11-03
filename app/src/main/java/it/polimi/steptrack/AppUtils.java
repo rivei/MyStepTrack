@@ -2,19 +2,13 @@ package it.polimi.steptrack;
 
 import android.app.ActivityManager;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.location.Location;
-import android.net.Uri;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
-import android.util.Log;
 import android.widget.Toast;
 
 import com.google.android.gms.location.DetectedActivity;
-import com.google.android.gms.location.places.Place;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -22,17 +16,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Type;
 import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
-
-import it.polimi.steptrack.roomdatabase.AppDatabase;
-import it.polimi.steptrack.roomdatabase.entities.AccelerometerSample;
-import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 
 import static it.polimi.steptrack.AppConstants.MILLI2NANO;
 import static it.polimi.steptrack.AppConstants.SERVICE_NOT_RUNNING;
@@ -155,7 +142,6 @@ public class AppUtils {
                 .putInt(KEY_LAST_STEP_COUNT, lastStepCount)
                 .apply();
     }
-
     public static final String KEY_LAST_REPORT_TIME = "last_report_time";
     public static long getLastReportTime(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
@@ -168,16 +154,29 @@ public class AppUtils {
                 .apply();
     }
 
-
-    public static final String KEY_REPORT_STEPS = "report_steps";
-    public static int getReportSteps(Context context){
+    //For hourly record
+    public static final String KEY_LAST_RECORD_TIME = "last_record_time";
+    public static long getLastRecordTime(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
-                .getInt(KEY_REPORT_STEPS,0);
+                .getLong(KEY_LAST_RECORD_TIME, 0);
     }
-    public static void setKeyReportSteps(Context context, int steps){
+    public static void setKeyLastRecordTime(Context context, long timestamp){
         PreferenceManager.getDefaultSharedPreferences(context)
                 .edit()
-                .putInt(KEY_REPORT_STEPS, steps)
+                .putLong(KEY_LAST_RECORD_TIME, timestamp)
+                .apply();
+    }
+
+
+    public static final String KEY_RECORD_STEPS = "record_steps";
+    public static int getRecordSteps(Context context){
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getInt(KEY_RECORD_STEPS,0);
+    }
+    public static void setKeyRecordSteps(Context context, int steps){
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putInt(KEY_RECORD_STEPS, steps)
                 .apply();
     }
 
@@ -343,6 +342,30 @@ public class AppUtils {
     /** TODO organized in a better way
      * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone
      */
+    public static long getYesterdayStart(){
+        Calendar c = Calendar.getInstance();
+        c.add(Calendar.DATE, -1);
+
+        c.set(Calendar.HOUR_OF_DAY, 0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+
+        return c.getTimeInMillis();
+    }
+
+    public static long getYesterdayEnd(){
+        Calendar c = Calendar.getInstance();
+        c.add(Calendar.DATE, -1);
+
+        c.set(Calendar.HOUR_OF_DAY, 23);
+        c.set(Calendar.MINUTE, 59);
+        c.set(Calendar.SECOND, 59);
+        c.set(Calendar.MILLISECOND, 999);
+
+        return c.getTimeInMillis();
+    }
+
     public static boolean isToday(long timestamp){
         Calendar c = Calendar.getInstance();
         Calendar today = Calendar.getInstance();
@@ -354,47 +377,32 @@ public class AppUtils {
             return false;
         }
     }
-    public static boolean isBeforeToday(long timestamp){
-        Calendar c = Calendar.getInstance();
-        Calendar today = Calendar.getInstance();
-        c.setTimeInMillis(timestamp);
-        today.setTimeInMillis(System.currentTimeMillis());
-        today.set(Calendar.HOUR_OF_DAY, 0);
-        today.set(Calendar.MINUTE, 0);
-        today.set(Calendar.SECOND, 0);
-
-        if(c.before(today)){
-            return true;
-        }else{
-            return false;
-        }
-    }
-    public static long getDateStart(long timestamp){
-        if(timestamp > 0) {
-            Calendar c = Calendar.getInstance();
-            c.setTimeInMillis(timestamp);
-            c.set(Calendar.HOUR_OF_DAY, 0);
-            c.set(Calendar.MINUTE, 0);
-            c.set(Calendar.SECOND, 0);
-            c.set(Calendar.MILLISECOND, 0);
-
-            return c.getTimeInMillis();
-
-//            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
-//            String dateInString = c.get(Calendar.DAY_OF_MONTH) + "/" +
-//                    c.get(Calendar.MONTH) + "/" +
-//                    c.get(Calendar.YEAR);
-//            try {
-//                return sdf.parse(dateInString);
-//            } catch (ParseException e) {
-//                e.printStackTrace();
-//                return null;
-//            }
-        }else {
-            return timestamp;
-        }
-    }
-
+    //    public static long getDateStart(long timestamp){
+//        if(timestamp > 0) {
+//            Calendar c = Calendar.getInstance();
+//            c.setTimeInMillis(timestamp);
+//            c.set(Calendar.HOUR_OF_DAY, 0);
+//            c.set(Calendar.MINUTE, 0);
+//            c.set(Calendar.SECOND, 0);
+//            c.set(Calendar.MILLISECOND, 0);
+//
+//            return c.getTimeInMillis();
+//
+////            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+////            String dateInString = c.get(Calendar.DAY_OF_MONTH) + "/" +
+////                    c.get(Calendar.MONTH) + "/" +
+////                    c.get(Calendar.YEAR);
+////            try {
+////                return sdf.parse(dateInString);
+////            } catch (ParseException e) {
+////                e.printStackTrace();
+////                return null;
+////            }
+//        }else {
+//            return timestamp;
+//        }
+//    }
+//
     /**
      * For activity detection
      */

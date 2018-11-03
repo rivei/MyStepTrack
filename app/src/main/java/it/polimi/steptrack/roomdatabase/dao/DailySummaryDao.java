@@ -32,4 +32,10 @@ public interface DailySummaryDao {
 //    @Query("SELECT * from daily_summaries WHERE did = (SELECT MAX(did) FROM daily_summaries)")
 //    MutableLiveData<DailySummary> getLastReportTime();
 
+    @Query("SELECT COUNT(*) from daily_summaries WHERE reportTime BETWEEN :startTime AND :endTime")
+    int getNumSummariesBetween(long startTime, long endTime);
+
+    @Query("SELECT * from daily_summaries ORDER BY reportTime DESC LIMIT 1")
+    DailySummary getLastReport();
+
 }

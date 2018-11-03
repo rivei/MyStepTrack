@@ -47,20 +47,20 @@ public class DailySummary {
     @ColumnInfo
     public long reportTime;
 
-    public DailySummary(){}
-
-    public DailySummary(int userId, Date mDate, int numWalkingSessions, long walkingduration,
-                        float distance, int steps, float speed, long stepDetect, long reportTime) {
-        this.userId = userId;
-        this.mDate = mDate;
-        this.numWalkingSessions = numWalkingSessions;
-        this.walkingduration = walkingduration;
-        this.distance = distance;
-        this.steps = steps;
-        this.speed = speed;
-        this.stepDetect = stepDetect;
-        this.reportTime = reportTime;
-    }
+//    public DailySummary(){}
+//
+//    public DailySummary(int userId, Date mDate, int numWalkingSessions, long walkingduration,
+//                        float distance, int steps, float speed, long stepDetect, long reportTime) {
+//        this.userId = userId;
+//        this.mDate = mDate;
+//        this.numWalkingSessions = numWalkingSessions;
+//        this.walkingduration = walkingduration;
+//        this.distance = distance;
+//        this.steps = steps;
+//        this.speed = speed;
+//        this.stepDetect = stepDetect;
+//        this.reportTime = reportTime;
+//    }
 
     @Override
     public String toString(){

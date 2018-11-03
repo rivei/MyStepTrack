@@ -784,9 +784,9 @@ public class MainActivity extends AppCompatActivity
                 e.printStackTrace();
             }
 
-            DailySummary dailySummary = new DailySummary(0,date,90000,
-                    400,700,1000,1.4f,700,0);
-            reportDao.insert(dailySummary);
+//            DailySummary dailySummary = new DailySummary(0,date,90000,
+//                    400,700,1000,1.4f,700,0);
+//            reportDao.insert(dailySummary);
 
             return null;
         }
