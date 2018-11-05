@@ -66,11 +66,13 @@ import it.polimi.steptrack.roomdatabase.dao.DailySummaryDao;
 import it.polimi.steptrack.roomdatabase.dao.GPSLocationDao;
 import it.polimi.steptrack.roomdatabase.dao.HourlyStepsDao;
 import it.polimi.steptrack.roomdatabase.dao.StepDetectedDao;
+import it.polimi.steptrack.roomdatabase.dao.WalkingEventDao;
 import it.polimi.steptrack.roomdatabase.dao.WalkingSessionDao;
 import it.polimi.steptrack.roomdatabase.entities.DailySummary;
 import it.polimi.steptrack.roomdatabase.entities.GPSLocation;
 import it.polimi.steptrack.roomdatabase.entities.HourlySteps;
 import it.polimi.steptrack.roomdatabase.entities.StepDetected;
+import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
@@ -82,11 +84,12 @@ import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_THRESHOLD;
 import static it.polimi.steptrack.AppConstants.NETWORK_UPDATE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.OUT_OF_HOME_DISTANCE;
 import static it.polimi.steptrack.AppConstants.SECOND2MILLI;
+import static it.polimi.steptrack.AppConstants.SECOND2NANO;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
 //import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
-import static it.polimi.steptrack.AppConstants.GPS_UPDATE_INTERVAL;
+
 
 public class StepTrackingService extends Service
         implements SensorEventListener, SharedPreferences.OnSharedPreferenceChangeListener {
@@ -101,7 +104,7 @@ public class StepTrackingService extends Service
     private boolean mSessionStarted = false; //Activate location update and sensors listener only when session starts
     private boolean mIsWalking = false; //Start walking = 0; stop walking = 1;
     private boolean mStepIncreasing = false;
-    //private boolean mIsReported = false;
+
 
 //    private long mTransitionEnterTime = -1L;
 //    private long mTransitionExitTime = -1L;
@@ -188,12 +191,10 @@ public class StepTrackingService extends Service
     private long mLastSensorUpdate = -1L;
 
     private int mTotalStepsCount = 0;
-    private boolean mReportGenerated = false;
-    private int mHourlyStepsOffset = 0;
     private int mStepsAtStart = 0;
     private int mStepsDetect = 0;
     private int mStepCountOffset = 0;
-//    private long mLast20StepTime = 0L;
+    private long mStepIncreaseStartTime = 0L;
 //    private int mLast20StepOffset = 0;
     private class StepsCounted{
         private int stepsOffset;
@@ -264,7 +265,10 @@ public class StepTrackingService extends Service
                     Log.v(TAG, "Status Changed: Temporarily Unavailable");
                     if(provider.equals(LocationManager.GPS_PROVIDER)) {
                         mGPSLostTimes++;
-                        mGPSStableTimes = 0;
+                        if(mGPSStableTimes > 0){
+                            if(mGPSStableTimes > 5) mGPSStableTimes = 5;
+                            mGPSStableTimes--;
+                        }
                     }
                     break;
                 case LocationProvider.AVAILABLE:
@@ -306,7 +310,7 @@ public class StepTrackingService extends Service
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY_5s);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//, BATCH_LATENCY_5s);
         } else {
             Toast.makeText(this, "Step count sensor missing. Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
@@ -320,8 +324,16 @@ public class StepTrackingService extends Service
 
         //************************* For step count *********************//
         // Setup Step Counter
-        mStepCountOffset = AppUtils.getStepCountOffset(self); //this will only change either at system start or after daily report
-        mTotalStepsCount = AppUtils.getLastStepCount(this) - mStepCountOffset;
+        mTotalStepsCount = AppUtils.getLastStepCount(self);
+        mStepCountOffset = AppUtils.getStepCountOffset(self);
+        if (AppUtils.getKeyPhoneReboot(self)) { //if the app doesn't auto start
+            int hourlyStepsOffset = AppUtils.getRecordSteps(self) - (mStepCountOffset + mTotalStepsCount);
+            AppUtils.setKeyRecordSteps(self,hourlyStepsOffset);
+            mStepCountOffset = 0 - mTotalStepsCount; //!!!
+            AppUtils.setStepCountOffset(self, mStepCountOffset);
+
+            AppUtils.setKeyPhoneReboot(self,false);
+        }
 
         // Get Notification Manager
         mNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
@@ -459,7 +471,7 @@ public class StepTrackingService extends Service
                 AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
                 AppUtils.setRequestingLocationUpdates(this, false);
             }
-            if(fastUpdate) {
+//            if(fastUpdate) {
                 try {
                     mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
                             NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
@@ -475,23 +487,23 @@ public class StepTrackingService extends Service
                     Log.e(TAG, "Location could not request updates. " + e);
                     updateNotification("Location could not request updates. " + e);
                 }
-            }else {
-                try {
-                    mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                            NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
-                    mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                            GPS_UPDATE_INTERVAL, 0, mLocationListener);
-                    AppUtils.setRequestingLocationUpdates(this, true);
-                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-                    isSuccess = true;
-                }catch (Exception e){
-                    isSuccess = false;
-                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
-                    AppUtils.setRequestingLocationUpdates(this, false);
-                    Log.e(TAG, "Location could not request updates. " + e);
-                    updateNotification("Location could not request updates. " + e);
-                }
-            }
+//            }else {
+//                try {
+//                    mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+//                            NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
+//                    mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+//                            GPS_UPDATE_INTERVAL, 0, mLocationListener);
+//                    AppUtils.setRequestingLocationUpdates(this, true);
+//                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
+//                    isSuccess = true;
+//                }catch (Exception e){
+//                    isSuccess = false;
+//                    AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
+//                    AppUtils.setRequestingLocationUpdates(this, false);
+//                    Log.e(TAG, "Location could not request updates. " + e);
+//                    updateNotification("Location could not request updates. " + e);
+//                }
+//            }
         }
         return isSuccess;
     }
@@ -626,7 +638,7 @@ public class StepTrackingService extends Service
         mSensorManager.unregisterListener(this); //unregiester motion sensors
         mCurSensorTime = -1L;
         //Never stop step counter sensor listening
-        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY_5s);
+        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//, BATCH_LATENCY_5s);
         mSessionFile = null;
         updateNotification( "Session not recording");
         Log.e(TAG, "Stop recording.");
@@ -651,7 +663,7 @@ public class StepTrackingService extends Service
             }
             mSensorManager.unregisterListener(this); //unregiester motion sensors
             mCurSensorTime = -1L;
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY_5s);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//,BATCH_LATENCY_5s);
             mSessionStarted = false;
             mSessionFile = null;
             mLastLocation = null;
@@ -686,6 +698,7 @@ public class StepTrackingService extends Service
             PendingIntent activityPendingIntent = PendingIntent.getActivity(this, 0,
                     new Intent(this, MainActivity.class), 0);
             mNotificationBuilder.setContentIntent(activityPendingIntent)
+                    .setShowWhen(false)
                     .setContentText(msg)
                     .setContentTitle(AppUtils.getLocationTitle(this))
                     .setOngoing(true)
@@ -744,8 +757,8 @@ public class StepTrackingService extends Service
                 Log.i(TAG, "GPS stable +1");
                 mGPSStableTimes++;
             }
-            if (mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD){ //||
-//                    !mCurrentLocation.hasBearing() || !mCurrentLocation.hasSpeed()){
+            if ((mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD) ||
+                (mLastLocation!=null && mCurrentLocation.getAccuracy() > 2 * mLastLocation.getAccuracy())){
                 if (mGPSStableTimes > 0){
                     if(mGPSStableTimes > 5) mGPSStableTimes = 5;
                     mGPSStableTimes--;
@@ -886,14 +899,24 @@ public class StepTrackingService extends Service
 
             //for hourly record
             long lastRecordTime = AppUtils.getLastRecordTime(self);
-            mHourlyStepsOffset = AppUtils.getRecordSteps(self);
-            if (mHourlyStepsOffset == 0){
-                mHourlyStepsOffset = mStepCountOffset;
+            int hourlyStepsOffset = AppUtils.getRecordSteps(self);
+            if (hourlyStepsOffset == 0){
+                hourlyStepsOffset = mStepCountOffset;
+            }
+            if(hourlyStepsOffset > systemSteps){
+                hourlyStepsOffset = systemSteps;
             }
 
             if (!arrSteps.isEmpty()){
                 long lastStepsTime = arrSteps.get(arrSteps.size()-1).getTimestamp();
-                if (mCurSensorTime - lastStepsTime > 10 * BATCH_LATENCY_5s){ //10 second without step increasing
+                if (mCurSensorTime - lastStepsTime > 10 * SECOND2NANO){ //10 second without step increasing
+                    if (mStepIncreasing){
+                        WalkingEvent walkingEvent = new WalkingEvent();
+                        walkingEvent.WeTimestamp = System.currentTimeMillis();
+                        walkingEvent.mTransition = 0;
+                        walkingEvent.mElapsedTime = lastStepsTime;
+                        new insertEventAsyncTask(mDB.walkingEventDao()).execute(walkingEvent);
+                    }
                     mStepIncreasing = false;
                     arrSteps.clear();
                 }else {
@@ -902,9 +925,16 @@ public class StepTrackingService extends Service
 //                    Log.i(TAG,"timeDiff: " + stepDur);
 //                    Log.i(TAG,"stepDiff: " + stepSum);
 //                    Log.i(TAG, "array size: " + arrSteps.size());
-                    if(stepSum >= 20 && stepDur > 0) {
+                    if(stepSum >= 15 && stepDur > 0) { //15 steps as detected walking
                         double ratio = stepDur / stepSum;
                         if ( ratio > 400 && ratio < 900 ) {
+                            if (!mStepIncreasing){
+                                WalkingEvent walkingEvent = new WalkingEvent();
+                                walkingEvent.WeTimestamp = System.currentTimeMillis();
+                                walkingEvent.mTransition = 1;
+                                walkingEvent.mElapsedTime = arrSteps.get(0).getTimestamp(); //get the timestamp for the first step
+                                new insertEventAsyncTask(mDB.walkingEventDao()).execute(walkingEvent);
+                            }
                             mStepIncreasing = true;
                         }
                         arrSteps.remove(0); //always remove the first one
@@ -918,39 +948,38 @@ public class StepTrackingService extends Service
             if (!mSessionStarted) {
                 //only record the hourly steps when there is no ongoing walking session;
                 if ((mCurSensorTime > lastRecordTime + STEP_SAVE_INTERVAL) ||
-                        (systemSteps - mHourlyStepsOffset > STEP_SAVE_OFFSET)) {
+                        (systemSteps - hourlyStepsOffset > STEP_SAVE_OFFSET)) {
 
-//                    if(!mReportGenerated) {
-                        dailyreportAsyncTask dailyreportTask = new dailyreportAsyncTask(mDB);
-                        if (AppUtils.isToday(lastRecordTime)) {
-                            dailyreportTask.execute(0);
-                        } else {
-                            dailyreportTask.execute(systemSteps - mHourlyStepsOffset);
+                    dailyreportAsyncTask dailyreportTask = new dailyreportAsyncTask(mDB);
+                    if (AppUtils.isToday(lastRecordTime)) {
+                        dailyreportTask.execute(0);
+                    } else {
+                        dailyreportTask.execute(systemSteps - hourlyStepsOffset);
+                    }
+                    dailyreportTask.setOnReportFinishedListener(new OnReportFinishedListener() {
+                        @Override
+                        public void onReportSuccess(Integer stepsOffset) {
+                            mStepCountOffset += stepsOffset; //this is not synchronized and followed by the code outside this listener!!!
+                            mTotalStepsCount -= stepsOffset;
+                            AppUtils.setStepCountOffset(self, mStepCountOffset);
+                            AppUtils.setKeyLastStepCount(self, mTotalStepsCount);
+                            Log.i(TAG, "Daily report generated");
                         }
-                        dailyreportTask.setOnReportFinishedListener(new OnReportFinishedListener() {
-                            @Override
-                            public void onReportSuccess(Integer stepsOffset) {
-//                                mReportGenerated = true;
-                                mStepCountOffset += stepsOffset;
-                                Log.i(TAG, "Daily report generated");
-                            }
 
-                            @Override
-                            public void onReportFailed() {
-//                                mReportGenerated = false;
-                                Log.i(TAG, "No Daily report");
-                            }
-                        });
-//                    }
+                        @Override
+                        public void onReportFailed() {
+                            Log.i(TAG, "No Daily report");
+                        }
+                    });
+
                     HourlySteps hourlySteps = new HourlySteps();
-                    hourlySteps.steps = systemSteps - mHourlyStepsOffset;
+                    hourlySteps.steps = systemSteps - hourlyStepsOffset;
                     hourlySteps.timestamp = mCurSensorTime;
                     new saveStepAsyncTask(mDB.hourlyStepsDao()).execute(hourlySteps);
 
-                    mHourlyStepsOffset = systemSteps;
+                    hourlyStepsOffset = systemSteps;
                     AppUtils.setKeyLastRecordTime(self, mCurSensorTime);
-                    AppUtils.setKeyRecordSteps(self, mHourlyStepsOffset);
-
+                    AppUtils.setKeyRecordSteps(self, hourlyStepsOffset);
                 }
             }
 
@@ -958,10 +987,11 @@ public class StepTrackingService extends Service
                 mTotalStepsCount = systemSteps - mStepCountOffset;
             }else {
                 mStepCountOffset = systemSteps;
+                AppUtils.setStepCountOffset(self,mStepCountOffset);
                 mTotalStepsCount = 0;
             }
 
-            AppUtils.setKeyLastStepCount(this, mTotalStepsCount);
+            AppUtils.setKeyLastStepCount(self, mTotalStepsCount);
             Log.i(TAG, "Total steps count: " + mTotalStepsCount);
             //TODO: can change below to updateNotification
             if (AppUtils.getServiceRunningStatus(this) == SERVICE_RUNNING_FOREGROUND) {
@@ -1073,6 +1103,14 @@ public class StepTrackingService extends Service
                 }
                 if (!arrSteps.isEmpty() &&
                         (curSysTime - arrSteps.get(arrSteps.size()-1).getTimestamp() > 30 * SECOND2MILLI)){ //30 second without step increasing
+                    if (mStepIncreasing = true){
+                        WalkingEvent walkingEvent = new WalkingEvent();
+                        walkingEvent.WeTimestamp = System.currentTimeMillis();
+                        walkingEvent.mTransition = 0;
+                        walkingEvent.mElapsedTime = arrSteps.get(arrSteps.size()-1).getTimestamp();
+                        new insertEventAsyncTask(mDB.walkingEventDao()).execute(walkingEvent);
+                    }
+
                     mStepIncreasing = false;
                     arrSteps.clear();
                     autostart = false;
@@ -1083,7 +1121,7 @@ public class StepTrackingService extends Service
             if(autostart){
                 Log.e(TAG, "auto running session");
                 if (!mSessionStarted){
-                    requestLocationUpdates(true);
+//                    requestLocationUpdates(true);
                     startRecording();
                     mSessionStarted = true;
                 }
@@ -1099,7 +1137,7 @@ public class StepTrackingService extends Service
                 if(mStepIncreasing){
                     if(AppUtils.getKeyRequestingLocationUpdatesFast(self)) {
                         //make sure whenever there is walking session, location is watched
-                        requestLocationUpdates(false);
+//                        requestLocationUpdates(false);
                         updateNotification("Walking detected. Searching for GPS...");
                     }
                 } else {
@@ -1270,6 +1308,21 @@ public class StepTrackingService extends Service
         @Override
         protected Void doInBackground(HourlySteps... steps) {
             mAsyncTaskDao.insert(steps[0]);
+            return null;
+        }
+    }
+
+    private static class insertEventAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
+
+        private WalkingEventDao mAsyncTaskDao;
+
+        insertEventAsyncTask(WalkingEventDao dao) {
+            mAsyncTaskDao = dao;
+        }
+
+        @Override
+        protected Void doInBackground(WalkingEvent... walkingEvents) {
+            mAsyncTaskDao.insert(walkingEvents[0]);
             return null;
         }
     }

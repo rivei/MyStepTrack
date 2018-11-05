@@ -33,11 +33,11 @@ public final class AppConstants {
     public static final long NETWORK_UPDATE_INTERVAL = 15000; //15s
     public static final long GPS_UPDATE_INTERVAL = 10000; //10s
     //The fastest rate for active location updates. Updates will never be more frequent than this value.
-    public static final long GPS_FAST_UPDATE_INTERVAL = 2500;//choosing 2.5s will get 3s or more
+    public static final long GPS_FAST_UPDATE_INTERVAL = 2000;//choosing 2s will get 3s or more
     public static final float UPDATE_DISTANCE_IN_METERS = 3f;
 
-    public static final float GPS_ACCEPTABLE_ACCURACY = 50f;  //TODO: define GPS accuracy radius
-    public static final float GPS_ACCURACY_THRESHOLD = 80f;
+    public static final float GPS_ACCEPTABLE_ACCURACY = 25f;  //TODO: define GPS accuracy radius
+    public static final float GPS_ACCURACY_THRESHOLD = 50f;
     public static final float GPS_ACCURACY_FOR_SUM = 10f;     //only points within this accuracy will be counted
     public static final float GPS_DISTANCE_THRESHOLD_FOR_SUM = GPS_ACCURACY_FOR_SUM/2;         //only sum when the distance between 2 points are bigger than this
 
