@@ -6,8 +6,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -215,6 +217,8 @@ public class StepTrackingService extends Service
     }
     ArrayList<StepsCounted> arrSteps = new ArrayList<>();
 
+    private BroadcastReceiver mBroadcastReceiver;
+
     /**
      *  for database
      */
@@ -335,6 +339,11 @@ public class StepTrackingService extends Service
             AppUtils.setKeyPhoneReboot(self,false);
         }
 
+        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        mBroadcastReceiver = new ScreenReceiver();
+        registerReceiver(mBroadcastReceiver, filter);
+
         // Get Notification Manager
         mNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
         mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -349,6 +358,8 @@ public class StepTrackingService extends Service
             // Set the Notification Channel for the Notification Manager.
             mNotificationManager.createNotificationChannel(mChannel);
         }
+
+
 
         /**
          * Setup File path for tracking records
@@ -1079,6 +1090,7 @@ public class StepTrackingService extends Service
             return null;
         }
     }
+
     private void autoSessionManagement(){
         if(!mManualMode) {
             boolean autostart = false;
@@ -1324,6 +1336,24 @@ public class StepTrackingService extends Service
         protected Void doInBackground(WalkingEvent... walkingEvents) {
             mAsyncTaskDao.insert(walkingEvents[0]);
             return null;
+        }
+    }
+
+    public class ScreenReceiver extends BroadcastReceiver
+    {
+
+        @Override
+        public void onReceive(Context context, Intent intent)
+        {
+            if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF))
+            {
+                // Unregister and register listener after screen goes off -> prevent cpu sleeping?
+                mSensorManager.unregisterListener(self);
+                mSensorManager.registerListener(self,countSensor,SensorManager.SENSOR_DELAY_UI);
+                if (mSessionStarted){
+                    registerSensorListener();
+                }
+            }
         }
     }
 
