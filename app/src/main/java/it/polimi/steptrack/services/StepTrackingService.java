@@ -1134,8 +1134,8 @@ public class StepTrackingService extends Service
                 Log.e(TAG, "auto running session");
                 if (!mSessionStarted){
 //                    requestLocationUpdates(true);
-                    startRecording();
                     mSessionStarted = true;
+                    startRecording();
                 }
             }else{
                 Log.e(TAG, "auto stop session");
