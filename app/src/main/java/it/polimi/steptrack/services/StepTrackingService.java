@@ -28,11 +28,15 @@ import android.os.Bundle;
 import android.os.Environment;
 //import android.os.Handler;
 //import android.os.HandlerThread;
+import android.os.Handler;
 import android.os.IBinder;
 //import android.os.Looper;
+import android.os.PowerManager;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -52,6 +56,16 @@ import android.widget.Toast;
 //import com.google.android.gms.tasks.OnSuccessListener;
 //import com.google.android.gms.tasks.Task;
 
+
+import com.google.android.gms.location.ActivityRecognition;
+import com.google.android.gms.location.ActivityTransition;
+import com.google.android.gms.location.ActivityTransitionEvent;
+import com.google.android.gms.location.ActivityTransitionRequest;
+import com.google.android.gms.location.ActivityTransitionResult;
+import com.google.android.gms.location.DetectedActivity;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -78,18 +92,19 @@ import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
-import static it.polimi.steptrack.AppConstants.BATCH_LATENCY_5s;
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
 import static it.polimi.steptrack.AppConstants.GPS_FAST_UPDATE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_FOR_SUM;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_THRESHOLD;
 import static it.polimi.steptrack.AppConstants.NETWORK_UPDATE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.OUT_OF_HOME_DISTANCE;
+import static it.polimi.steptrack.AppConstants.SCREEN_OFF_RECEIVER_DELAY;
 import static it.polimi.steptrack.AppConstants.SECOND2MILLI;
 import static it.polimi.steptrack.AppConstants.SECOND2NANO;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
+import static it.polimi.steptrack.AppConstants.TRANSITIONS_RECEIVER_ACTION;
 //import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 
 
@@ -108,8 +123,8 @@ public class StepTrackingService extends Service
     private boolean mStepIncreasing = false;
 
 
-//    private long mTransitionEnterTime = -1L;
-//    private long mTransitionExitTime = -1L;
+    private long mTransitionEnterTime = -1L;
+    private long mTransitionExitTime = -1L;
     private boolean mOutofHome = false; //TODO: radius greater than threshold (30 meters + accuracy).
     private boolean mManualMode = false; //when manual mode is true, walking session doesn't depends on other things;
     private int mGPSLostTimes = 0;
@@ -171,11 +186,11 @@ public class StepTrackingService extends Service
     private Location mHomeLocation;
     private float mTotalDistance = 0f;
 
-//    /**
-//     * For activity detection
-//     */
-//    private PendingIntent mPendingIntent;
-//    private TransitionsReceiver mTransitionsReceiver;
+    /**
+     * For activity detection
+     */
+    private PendingIntent mPendingIntent;
+    private TransitionsReceiver mTransitionsReceiver;
 
     private SensorManager mSensorManager;
     private Sensor countSensor = null;
@@ -217,8 +232,8 @@ public class StepTrackingService extends Service
     }
     ArrayList<StepsCounted> arrSteps = new ArrayList<>();
 
-    private BroadcastReceiver mBroadcastReceiver;
-
+    private BroadcastReceiver mScreenOffReceiver;
+    private PowerManager.WakeLock mWakeLock;
     /**
      *  for database
      */
@@ -341,8 +356,9 @@ public class StepTrackingService extends Service
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
         filter.addAction(Intent.ACTION_SCREEN_OFF);
-        mBroadcastReceiver = new ScreenReceiver();
-        registerReceiver(mBroadcastReceiver, filter);
+        mScreenOffReceiver = new ScreenReceiver(new Handler());
+        registerReceiver(mScreenOffReceiver, filter);
+//        acquireWakeLock(); //!! Try to see how much battery drain will this be
 
         // Get Notification Manager
         mNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID);
@@ -359,6 +375,13 @@ public class StepTrackingService extends Service
             mNotificationManager.createNotificationChannel(mChannel);
         }
 
+        /**
+         * Activity Detection
+         */
+        Intent intent = new Intent(TRANSITIONS_RECEIVER_ACTION);
+        mPendingIntent = PendingIntent.getBroadcast(this, 0, intent, 0);
+        mTransitionsReceiver = new TransitionsReceiver();
+        registerReceiver(mTransitionsReceiver, new IntentFilter(TRANSITIONS_RECEIVER_ACTION));
 
 
         /**
@@ -382,8 +405,8 @@ public class StepTrackingService extends Service
         Log.i(TAG, "Foreground service started");
 
         //************************* For step count ~*********************//
-//        //start Monitoring activities and locations
-//        setupActivityTransitions();
+        //start Monitoring activities and locations
+        setupActivityTransitions();
 
         PreferenceManager.getDefaultSharedPreferences(self)
                 .registerOnSharedPreferenceChangeListener(this);
@@ -440,30 +463,36 @@ public class StepTrackingService extends Service
 
     @Override
     public void onDestroy() {
-//        // Unregister the transitions
-//        ActivityRecognition.getClient(this).removeActivityTransitionUpdates(mPendingIntent)
-//                .addOnSuccessListener(new OnSuccessListener<Void>() {
-//                    @Override
-//                    public void onSuccess(Void aVoid) {
-//                        Log.i(TAG, "Transitions successfully unregistered.");
-//                    }
-//                })
-//                .addOnFailureListener(new OnFailureListener() {
-//                    @Override
-//                    public void onFailure(@NonNull Exception e) {
-//                        Log.e(TAG, "Transitions could not be unregistered: " + e);
-//                    }
-//                });
-//        if (mTransitionsReceiver != null) {
-//            unregisterReceiver(mTransitionsReceiver);
-//            mTransitionsReceiver = null;
-//        }
+        // Unregister the transitions
+        ActivityRecognition.getClient(this).removeActivityTransitionUpdates(mPendingIntent)
+                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void aVoid) {
+                        Log.i(TAG, "Transitions successfully unregistered.");
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.e(TAG, "Transitions could not be unregistered: " + e);
+                    }
+                });
+        if (mTransitionsReceiver != null) {
+            unregisterReceiver(mTransitionsReceiver);
+            mTransitionsReceiver = null;
+        }
+        if (mScreenOffReceiver != null){
+            unregisterReceiver(mScreenOffReceiver);
+            mScreenOffReceiver = null;
+        }
 
 //        mServiceHandler.removeCallbacksAndMessages(null);
         mLocationManager.removeUpdates(mLocationListener);
 
         PreferenceManager.getDefaultSharedPreferences(self)
                 .unregisterOnSharedPreferenceChangeListener(this);
+
+//        releaseWakeLock();//!!!
 
         super.onDestroy();
     }
@@ -924,7 +953,7 @@ public class StepTrackingService extends Service
                     if (mStepIncreasing){
                         WalkingEvent walkingEvent = new WalkingEvent();
                         walkingEvent.WeTimestamp = System.currentTimeMillis();
-                        walkingEvent.mTransition = 0;
+                        walkingEvent.mTransition = 3; //distinguish from API -> not walking
                         walkingEvent.mElapsedTime = lastStepsTime;
                         new insertEventAsyncTask(mDB.walkingEventDao()).execute(walkingEvent);
                     }
@@ -942,7 +971,7 @@ public class StepTrackingService extends Service
                             if (!mStepIncreasing){
                                 WalkingEvent walkingEvent = new WalkingEvent();
                                 walkingEvent.WeTimestamp = System.currentTimeMillis();
-                                walkingEvent.mTransition = 1;
+                                walkingEvent.mTransition = 4; //distinguish from API -> start walking
                                 walkingEvent.mElapsedTime = arrSteps.get(0).getTimestamp(); //get the timestamp for the first step
                                 new insertEventAsyncTask(mDB.walkingEventDao()).execute(walkingEvent);
                             }
@@ -1061,6 +1090,104 @@ public class StepTrackingService extends Service
         }
     }
 
+    /**
+     * Sets up {@link ActivityTransitionRequest}'s for the sample app, and registers callbacks for them
+     * with a custom {@link BroadcastReceiver}
+     */
+    private void setupActivityTransitions() {
+        List<ActivityTransition> transitions = new ArrayList<>();
+        transitions.add(
+                new ActivityTransition.Builder()
+                        .setActivityType(DetectedActivity.WALKING)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                        .build());
+        transitions.add(
+                new ActivityTransition.Builder()
+                        .setActivityType(DetectedActivity.WALKING)
+                        .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
+                        .build());
+        ActivityTransitionRequest request = new ActivityTransitionRequest(transitions);
+
+        // Register for Transitions Updates.
+        Task<Void> task =
+                ActivityRecognition.getClient(this)
+                        .requestActivityTransitionUpdates(request, mPendingIntent);
+        task.addOnSuccessListener(
+                new OnSuccessListener<Void>() {
+                    @Override
+                    public void onSuccess(Void result) {
+                        Log.i(TAG, "Transitions Api was successfully registered.");
+                    }
+                });
+        task.addOnFailureListener(
+                new OnFailureListener() {
+                    @Override
+                    public void onFailure(Exception e) {
+                        Log.e(TAG, "Transitions Api could not be registered: " + e);
+                    }
+                });
+    }
+
+    /**
+     * A basic BroadcastReceiver to handle intents from from the Transitions API.
+     */
+    public class TransitionsReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!TextUtils.equals(TRANSITIONS_RECEIVER_ACTION, intent.getAction())) {
+//                mLogFragment.getLogView()
+//                        .println("Received an unsupported action in TransitionsReceiver: action="
+//                                + intent.getAction());
+                Toast.makeText(context, "Received an unsupported action in TransitionsReceiver: action="
+                        + intent.getAction(), Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (ActivityTransitionResult.hasResult(intent)) {
+                ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
+                if (result != null) {
+                    for (ActivityTransitionEvent event : result.getTransitionEvents()) {
+                        //private List<AccelerometerSample> mAccSamples;
+                        WalkingEvent mWalkingEvent = new WalkingEvent();
+                        mWalkingEvent.WeTimestamp = System.currentTimeMillis();
+                        mWalkingEvent.mTransition = event.getTransitionType();
+                        mWalkingEvent.mElapsedTime =
+                                AppUtils.elapsedTime2timestamp(event.getElapsedRealTimeNanos());
+                        //mIsWalking = mWalkingEvent.mTransition;
+//                        Toast.makeText(context,toTransitionType(mWalkingEvent.mTransition),
+//                                Toast.LENGTH_LONG).show();
+                        if(mWalkingEvent.mTransition == 0){
+                            mIsWalking = true;
+                            mTransitionEnterTime = mWalkingEvent.mElapsedTime;
+                        }
+                        if (mWalkingEvent.mTransition == 1){
+                            mIsWalking = false;
+                            mTransitionExitTime = mWalkingEvent.mElapsedTime;
+                        }
+
+                        new insertEventAsyncTask(mDB.walkingEventDao()).execute(mWalkingEvent);
+
+                        autoSessionManagement(); //check if need auto starting;
+                    }
+                }
+            }
+        }
+    }
+
+    private static class insertEventAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
+
+        private WalkingEventDao mAsyncTaskDao;
+
+        insertEventAsyncTask(WalkingEventDao dao) {
+            mAsyncTaskDao = dao;
+        }
+
+        @Override
+        protected Void doInBackground(WalkingEvent... walkingEvents) {
+            mAsyncTaskDao.insert(walkingEvents[0]);
+            return null;
+        }
+    }
+
     private static class insertStepAsyncTask extends AsyncTask<StepDetected, Void, Void> {
 
         private StepDetectedDao mAsyncTaskDao;
@@ -1115,10 +1242,10 @@ public class StepTrackingService extends Service
                 }
                 if (!arrSteps.isEmpty() &&
                         (curSysTime - arrSteps.get(arrSteps.size()-1).getTimestamp() > 30 * SECOND2MILLI)){ //30 second without step increasing
-                    if (mStepIncreasing = true){
+                    if (mStepIncreasing){
                         WalkingEvent walkingEvent = new WalkingEvent();
                         walkingEvent.WeTimestamp = System.currentTimeMillis();
-                        walkingEvent.mTransition = 0;
+                        walkingEvent.mTransition = 3; //not walking
                         walkingEvent.mElapsedTime = arrSteps.get(arrSteps.size()-1).getTimestamp();
                         new insertEventAsyncTask(mDB.walkingEventDao()).execute(walkingEvent);
                     }
@@ -1170,6 +1297,19 @@ public class StepTrackingService extends Service
         }
     }
 
+//    public void acquireWakeLock() {
+//        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+//        releaseWakeLock();
+//        mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,TAG);
+//        mWakeLock.acquire();
+//    }
+//
+//    public void releaseWakeLock() {
+//        if (mWakeLock != null && mWakeLock.isHeld()) {
+//            mWakeLock.release();
+//            mWakeLock = null;
+//        }
+//    }
 
     public interface OnReportFinishedListener {
         void onReportSuccess(Integer stepsOffset);
@@ -1324,34 +1464,34 @@ public class StepTrackingService extends Service
         }
     }
 
-    private static class insertEventAsyncTask extends AsyncTask<WalkingEvent, Void, Void> {
-
-        private WalkingEventDao mAsyncTaskDao;
-
-        insertEventAsyncTask(WalkingEventDao dao) {
-            mAsyncTaskDao = dao;
-        }
-
-        @Override
-        protected Void doInBackground(WalkingEvent... walkingEvents) {
-            mAsyncTaskDao.insert(walkingEvents[0]);
-            return null;
-        }
-    }
-
     public class ScreenReceiver extends BroadcastReceiver
     {
+        private final Handler mHandler;
+
+        public ScreenReceiver(Handler handler){
+            this.mHandler = handler;
+        }
 
         @Override
         public void onReceive(Context context, Intent intent)
         {
             if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF))
             {
-                // Unregister and register listener after screen goes off -> prevent cpu sleeping?
-                mSensorManager.unregisterListener(self);
-                mSensorManager.registerListener(self,countSensor,SensorManager.SENSOR_DELAY_UI);
-                if (mSessionStarted){
-                    registerSensorListener();
+                if (!AppUtils.startingWalkingSession(context)) {
+                    mHandler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.i(TAG, "Re-register sensor when screen turn off");
+                            // Unregister and register listener after screen goes off can prevent cpu sleeping?
+                            mSensorManager.unregisterListener(self);
+                            mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI);
+//                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
+//                            //without being put to sleep
+//                            if (mSessionStarted) {
+//                                registerSensorListener();
+//                            }
+                        }
+                    }, SCREEN_OFF_RECEIVER_DELAY);
                 }
             }
         }

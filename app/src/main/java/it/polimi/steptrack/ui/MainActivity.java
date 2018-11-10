@@ -86,8 +86,9 @@ public class MainActivity extends AppCompatActivity
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECEIVE_BOOT_COMPLETED,
             Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-    };
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+};
 
     private static final int PLACE_PICKER_REQUEST = 1;
 
@@ -119,7 +120,7 @@ public class MainActivity extends AppCompatActivity
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        //TODO: set-up bootreceiver
+        //set-up bootreceiver
         final ComponentName onBootReceiver = new ComponentName(getApplication().getPackageName(), ServiceRestartReceiver.class.getName());
         if(getPackageManager().getComponentEnabledSetting(onBootReceiver) != PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
             getPackageManager().setComponentEnabledSetting(onBootReceiver,PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);
@@ -149,7 +150,7 @@ public class MainActivity extends AppCompatActivity
 //        getSupportFragmentManager().beginTransaction()
 //                .add(R.id.fragment_container, fragment, StatusFragment.TAG).commit();
 
-        //TODO: *** Start service for counting steps
+        //*** Start service for counting steps
         // Check if the service is running
         if (AppUtils.getServiceRunningStatus(self) <= 0) {
             // Start Step Counting service
@@ -283,8 +284,8 @@ public class MainActivity extends AppCompatActivity
         // Bind to the service. If the service is in foreground mode, this signals to the service
         // that since this activity is in the foreground, the service can exit foreground mode.
         bindService(new Intent(this, StepTrackingService.class), mServiceConnection,
-                Context.BIND_AUTO_CREATE);//TODO NOTE: activates the onCreate of service and
-        //TODO NOTE: the foreground mode only works when this is put in onStart
+                Context.BIND_AUTO_CREATE);//NOTE: activates the onCreate of service and
+        //NOTE: the foreground mode only works when this is put in onStart
 
 //        LatLng latLng = AppUtils.getPrefPlaceLocation(self);
         Location location = AppUtils.getPrefPlaceLocation(self);

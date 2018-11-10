@@ -47,6 +47,7 @@ public final class AppConstants {
       */
     public final static long MICROSECONDS_IN_ONE_MINUTE = 60000000;
     public final static int BATCH_LATENCY_5s = 5000000; //in microseconds
+    public static final long SCREEN_OFF_RECEIVER_DELAY = 500;
 
     /**
      * For Geofencing
