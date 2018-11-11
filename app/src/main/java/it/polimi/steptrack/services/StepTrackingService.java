@@ -42,8 +42,6 @@ import com.google.android.gms.location.ActivityTransitionEvent;
 import com.google.android.gms.location.ActivityTransitionRequest;
 import com.google.android.gms.location.ActivityTransitionResult;
 import com.google.android.gms.location.DetectedActivity;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 
 import java.io.File;
@@ -71,6 +69,7 @@ import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
 
+import static it.polimi.steptrack.AppConstants.BATCH_LATENCY;
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
 import static it.polimi.steptrack.AppConstants.GPS_FAST_UPDATE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_FOR_SUM;
@@ -308,7 +307,7 @@ public class StepTrackingService extends Service
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//, BATCH_LATENCY_5s);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY);
         } else {
             Toast.makeText(this, "Step count sensor missing. Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
@@ -650,7 +649,7 @@ public class StepTrackingService extends Service
         mSensorManager.unregisterListener(this); //unregiester motion sensors
         mCurSensorTime = -1L;
         //Never stop step counter sensor listening
-        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//, BATCH_LATENCY_5s);
+        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY);
         mSessionFile = null;
         updateNotification( "Session not recording");
         Log.e(TAG, "Stop recording.");
@@ -675,7 +674,7 @@ public class StepTrackingService extends Service
             }
             mSensorManager.unregisterListener(this); //unregiester motion sensors
             mCurSensorTime = -1L;
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//,BATCH_LATENCY_5s);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
             mSessionStarted = false;
             mSessionFile = null;
             mLastLocation = null;
@@ -1437,12 +1436,10 @@ public class StepTrackingService extends Service
                         Log.i(TAG, "Re-register sensor when screen turn off");
                         // Unregister and register listener after screen goes off can prevent cpu sleeping?
                         mSensorManager.unregisterListener(self);
-                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI);
+                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
 //                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
 //                            //without being put to sleep
-//                            if (mSessionStarted) {
-//                                registerSensorListener();
-//                            }
+                        if (mSessionStarted) registerSensorListener();
                     }, SCREEN_OFF_RECEIVER_DELAY);
                 }
             }
