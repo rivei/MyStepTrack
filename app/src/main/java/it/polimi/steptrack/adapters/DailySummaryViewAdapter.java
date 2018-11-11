@@ -56,7 +56,7 @@ public class DailySummaryViewAdapter extends RecyclerView.Adapter<DailySummaryVi
         private TextView tvSpeed;
         private TextView tvSteps;
 
-        public DailySummaryViewHolder(@NonNull View itemView) {
+        DailySummaryViewHolder(@NonNull View itemView) {
             super(itemView);
             tvDate = itemView.findViewById(R.id.tvDate);
             tvDistance = itemView.findViewById(R.id.tvDistance);
@@ -67,11 +67,11 @@ public class DailySummaryViewAdapter extends RecyclerView.Adapter<DailySummaryVi
 
         public void bind(DailySummary report){
             if(report!=null){
-                tvDate.setText("Date:" + report.mDate);
-                tvSteps.setText("Steps: " + report.steps);
-                tvSpeed.setText("Speed: " + report.speed);
-                tvDuration.setText("Duration: " + report.walkingduration);
-                tvDistance.setText("Distance: " + report.distance);
+                tvDate.setText(String.format("Date:%s", report.mDate));
+                tvSteps.setText(String.format("Steps: %d", report.steps));
+                tvSpeed.setText(String.format("Speed: %s", report.speed));
+                tvDuration.setText(String.format("Duration: %d", report.walkingduration));
+                tvDistance.setText(String.format("Distance: %s", report.distance));
             }
 
         }

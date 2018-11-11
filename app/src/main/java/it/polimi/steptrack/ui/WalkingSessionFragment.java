@@ -21,12 +21,7 @@ import it.polimi.steptrack.adapters.WalkingSessionRecyclerViewAdapter;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.viewmodels.WalkingSessionViewModel;
 
-/**
- * A fragment representing a list of Items.
- * <p/>
- * Activities containing this fragment MUST implement the {@link OnListFragmentInteractionListener}
- * interface.
- */
+
 public class WalkingSessionFragment extends Fragment {
     public final static String TAG = WalkingSessionFragment.class.getSimpleName();
 

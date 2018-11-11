@@ -8,15 +8,9 @@ import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.widget.Toast;
 
-import com.google.android.gms.location.DetectedActivity;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
 import java.io.File;
 import java.io.FileOutputStream;
-import java.lang.reflect.Type;
 import java.text.DateFormat;
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
@@ -26,14 +20,9 @@ import static it.polimi.steptrack.AppConstants.SERVICE_NOT_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEPTRACKINGSERVICE;
-import static java.lang.Math.round;
 
-/**
- * A class for App sharedpreference management
- */
+
 public class AppUtils {
-    // Identify Shared Preference Store
-    public final static String PREFS_NAME = "steptrack_prefs";
 
     /**
      * Returns if the service is running,running in foregound or not running
@@ -57,7 +46,7 @@ public class AppUtils {
         return status;
     }
 
-    public static final String KEY_FIRST_INSTALL_TIME = "first_install_time";
+    private static final String KEY_FIRST_INSTALL_TIME = "first_install_time";
     public static long getFirstInstallTime(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getLong(KEY_FIRST_INSTALL_TIME,0);
@@ -70,19 +59,19 @@ public class AppUtils {
     }
 
 
-    public static final String KEY_ACTIVITY_ACTIVE = "activity_active";
-    public static boolean getKeyActivityActive(Context context){
-        return PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(KEY_ACTIVITY_ACTIVE, false);
-    }
-    public static void setKeyActivityActive(Context context, boolean activityActive){
-        PreferenceManager.getDefaultSharedPreferences(context)
-                .edit()
-                .putBoolean(KEY_ACTIVITY_ACTIVE, activityActive)
-                .apply();
-    }
+//    public static final String KEY_ACTIVITY_ACTIVE = "activity_active";
+//    public static boolean getKeyActivityActive(Context context){
+//        return PreferenceManager.getDefaultSharedPreferences(context)
+//                .getBoolean(KEY_ACTIVITY_ACTIVE, false);
+//    }
+//    public static void setKeyActivityActive(Context context, boolean activityActive){
+//        PreferenceManager.getDefaultSharedPreferences(context)
+//                .edit()
+//                .putBoolean(KEY_ACTIVITY_ACTIVE, activityActive)
+//                .apply();
+//    }
 
-    public static final String KEY_PHONE_REBOOT = "phone_reboot";
+    private static final String KEY_PHONE_REBOOT = "phone_reboot";
     public static boolean getKeyPhoneReboot(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getBoolean(KEY_PHONE_REBOOT, false);
@@ -131,7 +120,7 @@ public class AppUtils {
                 .apply();
     }
 
-    public static final String KEY_LAST_STEP_COUNT = "last_step_count";
+    private static final String KEY_LAST_STEP_COUNT = "last_step_count";
     public static int getLastStepCount(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getInt(KEY_LAST_STEP_COUNT,0);
@@ -142,20 +131,20 @@ public class AppUtils {
                 .putInt(KEY_LAST_STEP_COUNT, lastStepCount)
                 .apply();
     }
-    public static final String KEY_LAST_REPORT_TIME = "last_report_time";
-    public static long getLastReportTime(Context context){
-        return PreferenceManager.getDefaultSharedPreferences(context)
-                .getLong(KEY_LAST_REPORT_TIME, 0);
-    }
-    public static void setKeyLastReportTime(Context context, long timestamp){
-        PreferenceManager.getDefaultSharedPreferences(context)
-                .edit()
-                .putLong(KEY_LAST_REPORT_TIME, timestamp)
-                .apply();
-    }
+//    private static final String KEY_LAST_REPORT_TIME = "last_report_time";
+//    public static long getLastReportTime(Context context){
+//        return PreferenceManager.getDefaultSharedPreferences(context)
+//                .getLong(KEY_LAST_REPORT_TIME, 0);
+//    }
+//    public static void setKeyLastReportTime(Context context, long timestamp){
+//        PreferenceManager.getDefaultSharedPreferences(context)
+//                .edit()
+//                .putLong(KEY_LAST_REPORT_TIME, timestamp)
+//                .apply();
+//    }
 
     //For hourly record
-    public static final String KEY_LAST_RECORD_TIME = "last_record_time";
+    private static final String KEY_LAST_RECORD_TIME = "last_record_time";
     public static long getLastRecordTime(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getLong(KEY_LAST_RECORD_TIME, 0);
@@ -168,7 +157,7 @@ public class AppUtils {
     }
 
 
-    public static final String KEY_RECORD_STEPS = "record_steps";
+    private static final String KEY_RECORD_STEPS = "record_steps";
     public static int getRecordSteps(Context context){
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getInt(KEY_RECORD_STEPS,0);
@@ -210,7 +199,7 @@ public class AppUtils {
     /**
      * For location
      */
-    public static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
+    private static final String KEY_REQUESTING_LOCATION_UPDATES = "requesting_locaction_updates";
 
     /**
      * Returns true if requesting location updates, otherwise returns false.
@@ -233,7 +222,7 @@ public class AppUtils {
                 .apply();
     }
 
-    public static final String KEY_REQUESTING_LOCATION_UPDATES_FAST = "requesting_locaction_updates_fast";
+    private static final String KEY_REQUESTING_LOCATION_UPDATES_FAST = "requesting_locaction_updates_fast";
     public static boolean getKeyRequestingLocationUpdatesFast(Context context) {
         return PreferenceManager.getDefaultSharedPreferences(context)
                 .getBoolean(KEY_REQUESTING_LOCATION_UPDATES_FAST, false);
@@ -246,14 +235,14 @@ public class AppUtils {
                 .apply();
     }
 
-    /**
-     * Returns the {@code location} object as a human readable string.
-     * @param location  The {@link Location}.
-     */
-    public static String getLocationText(Location location) {
-        return location == null ? "Unknown location" :
-                "(" + location.getLatitude() + ", " + location.getLongitude() + ")";
-    }
+//    /**
+//     * Returns the {@code location} object as a human readable string.
+//     * @param location  The {@link Location}.
+//     */
+//    public static String getLocationText(Location location) {
+//        return location == null ? "Unknown location" :
+//                "(" + location.getLatitude() + ", " + location.getLongitude() + ")";
+//    }
 
     public static String getLocationTitle(Context context) {
         return context.getString(R.string.location_updated,
@@ -261,32 +250,32 @@ public class AppUtils {
     }
 
 
-    public float getUpdatedDistance(Location oldLocation, Location newLocation){
-        float distance;
-        /** TODO
-         *There is 68% chance that user is within 100m from this location.
-         *So neglect location updates with poor accuracy
-         */
-/*        if(curLocation.getAccuracy()>ACCURACY_THRESHOLD){
-            return 0;
-        }
-        if(oldLocation.getLatitude() == 0 && oldLocation.getLongitude() == 0){
-            oldLocation.setLatitude(curLocation.getLatitude());
-            oldLocation.setLongitude(curLocation.getLongitude());
-            newLocation.setLatitude(curLocation.getLatitude());
-            newLocation.setLongitude(curLocation.getLongitude());
-            return 0;
-        }else{
-            oldLocation.setLatitude(newLocation.getLatitude());
-            oldLocation.setLongitude(newLocation.getLongitude());
-            newLocation.setLatitude(curLocation.getLatitude());
-            newLocation.setLongitude(curLocation.getLongitude());
-        }*/
-
-        // Calculate distance between last two geolocations
-        distance = newLocation.distanceTo(oldLocation);
-        return distance;
-    }
+//    public float getUpdatedDistance(Location oldLocation, Location newLocation){
+//        float distance;
+//        /**
+//         *There is 68% chance that user is within 100m from this location.
+//         *So neglect location updates with poor accuracy
+//         */
+///*        if(curLocation.getAccuracy()>ACCURACY_THRESHOLD){
+//            return 0;
+//        }
+//        if(oldLocation.getLatitude() == 0 && oldLocation.getLongitude() == 0){
+//            oldLocation.setLatitude(curLocation.getLatitude());
+//            oldLocation.setLongitude(curLocation.getLongitude());
+//            newLocation.setLatitude(curLocation.getLatitude());
+//            newLocation.setLongitude(curLocation.getLongitude());
+//            return 0;
+//        }else{
+//            oldLocation.setLatitude(newLocation.getLatitude());
+//            oldLocation.setLongitude(newLocation.getLongitude());
+//            newLocation.setLatitude(curLocation.getLatitude());
+//            newLocation.setLongitude(curLocation.getLongitude());
+//        }*/
+//
+//        // Calculate distance between last two geolocations
+//        distance = newLocation.distanceTo(oldLocation);
+//        return distance;
+//    }
 
     /**
      * For Geofencing
@@ -339,7 +328,7 @@ public class AppUtils {
     }
 
 
-    /** TODO organized in a better way
+    /**
      * @return milliseconds since 1.1.1970 for tomorrow 0:00:01 local timezone
      */
     public static long getYesterdayStart(){
@@ -371,11 +360,7 @@ public class AppUtils {
         Calendar today = Calendar.getInstance();
         c.setTimeInMillis(timestamp);
         today.setTimeInMillis(System.currentTimeMillis());
-        if(c.get(Calendar.DATE) == (today.get(Calendar.DATE))) {
-            return true;
-        }else{
-            return false;
-        }
+        return c.get(Calendar.DATE) == (today.get(Calendar.DATE));
     }
     //    public static long getDateStart(long timestamp){
 //        if(timestamp > 0) {
@@ -403,22 +388,22 @@ public class AppUtils {
 //        }
 //    }
 //
-    /**
-     * For activity detection
-     */
-    static String detectedActivitiesToJson(ArrayList<DetectedActivity> detectedActivitiesList) {
-        Type type = new TypeToken<ArrayList<DetectedActivity>>() {}.getType();
-        return new Gson().toJson(detectedActivitiesList, type);
-    }
-
-    static ArrayList<DetectedActivity> detectedActivitiesFromJson(String jsonArray) {
-        Type listType = new TypeToken<ArrayList<DetectedActivity>>(){}.getType();
-        ArrayList<DetectedActivity> detectedActivities = new Gson().fromJson(jsonArray, listType);
-        if (detectedActivities == null) {
-            detectedActivities = new ArrayList<>();
-        }
-        return detectedActivities;
-    }
+//    /**
+//     * For activity detection
+//     */
+//    static String detectedActivitiesToJson(ArrayList<DetectedActivity> detectedActivitiesList) {
+//        Type type = new TypeToken<ArrayList<DetectedActivity>>() {}.getType();
+//        return new Gson().toJson(detectedActivitiesList, type);
+//    }
+//
+//    static ArrayList<DetectedActivity> detectedActivitiesFromJson(String jsonArray) {
+//        Type listType = new TypeToken<ArrayList<DetectedActivity>>(){}.getType();
+//        ArrayList<DetectedActivity> detectedActivities = new Gson().fromJson(jsonArray, listType);
+//        if (detectedActivities == null) {
+//            detectedActivities = new ArrayList<>();
+//        }
+//        return detectedActivities;
+//    }
 
 //    public static List<String> Acc2String(AppDatabase db) {
 //        List<String> strings = null;

@@ -16,6 +16,7 @@ public class ServiceRestartReceiver extends BroadcastReceiver {
     //Make sure mobile permission allow auto start after reboot!!
     @Override
     public void onReceive(final Context context, final Intent intent) {
+        if (!intent.getAction().equals(Intent.ACTION_BOOT_COMPLETED)) return;
 
         Log.i(TAG, "Service stopped");
         Log.i(TAG, "Service status:" + AppUtils.getServiceRunningStatus(context));

@@ -1,8 +1,5 @@
 package it.polimi.steptrack;
 
-import com.google.android.gms.location.DetectedActivity;
-
-import androidx.versionedparcelable.ParcelUtils;
 
 public final class AppConstants {
     public static final String PACKAGE_NAME = "it.polimi.steptrack";

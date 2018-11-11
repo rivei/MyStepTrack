@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -51,12 +52,8 @@ implements SharedPreferences.OnSharedPreferenceChangeListener {
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         if(key.equals(KEY_SAMPLING_FREQUENCY)){
             long freq = AppUtils.getSamplingFrequency(mContext);
-            if(freq == 0){
-                tvSampling.setText("Current sensor sampling rate: 100 Hz");
-            }
-            else {
-                tvSampling.setText("Current sensor sampling rate: " + freq + "Hz");
-            }
+            if(freq == 0) tvSampling.setText("Current sensor sampling rate: 100 Hz");
+            else tvSampling.setText(String.format("Current sensor sampling rate: %dHz", freq));
         }
     }
 
@@ -110,52 +107,28 @@ implements SharedPreferences.OnSharedPreferenceChangeListener {
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View rootView =  inflater.inflate(R.layout.fragment_setting, container, false);
 
         tvSampling = rootView.findViewById(R.id.tvSampling);
         long freq = AppUtils.getSamplingFrequency(mContext);
-        if(freq == 0){
-            tvSampling.setText("Current sensor sampling rate: 50 Hz");
-        }
-        else {
-            tvSampling.setText("Current sensor sampling rate: " + freq + "Hz");
-        }
+        if(freq == 0) tvSampling.setText("Current sensor sampling rate: 50 Hz");
+        else tvSampling.setText(String.format("Current sensor sampling rate: %dHz", freq));
 
         Button bnPickHome = rootView.findViewById(R.id.btnPickHome);
         Button bnExport = rootView.findViewById(R.id.btnExport);
         Button bnSampling = rootView.findViewById(R.id.btnSampling);
         Button bnDummy = rootView.findViewById(R.id.btnDummy);
 
-        bnPickHome.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mListener.onSettingFragmentInteraction(ON_PLACE_CLICKED);
-            }
-        });
+        bnPickHome.setOnClickListener(view -> mListener.onSettingFragmentInteraction(ON_PLACE_CLICKED));
 
-        bnExport.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mListener.onSettingFragmentInteraction(ON_EXPORT_CLICKED);
-            }
-        });
+        bnExport.setOnClickListener(view -> mListener.onSettingFragmentInteraction(ON_EXPORT_CLICKED));
 
-        bnSampling.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mListener.onSettingFragmentInteraction(ON_SAMPLING_CLICKED);
-            }
-        });
+        bnSampling.setOnClickListener(v -> mListener.onSettingFragmentInteraction(ON_SAMPLING_CLICKED));
 
-        bnDummy.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mListener.onSettingFragmentInteraction(ON_DUMMY_CLICKED);
-            }
-        });
+        bnDummy.setOnClickListener(v -> mListener.onSettingFragmentInteraction(ON_DUMMY_CLICKED));
         return rootView;
     }
 

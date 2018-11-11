@@ -3,7 +3,6 @@ package it.polimi.steptrack.ui;
 import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
@@ -86,9 +85,10 @@ public class MainActivity extends AppCompatActivity
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECEIVE_BOOT_COMPLETED,
             Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-};
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+//            Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+    };
+
 
     private static final int PLACE_PICKER_REQUEST = 1;
 
@@ -117,7 +117,7 @@ public class MainActivity extends AppCompatActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
         //set-up bootreceiver
@@ -125,13 +125,13 @@ public class MainActivity extends AppCompatActivity
         if(getPackageManager().getComponentEnabledSetting(onBootReceiver) != PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
             getPackageManager().setComponentEnabledSetting(onBootReceiver,PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
                 this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
         drawer.addDrawerListener(toggle);
         toggle.syncState();
 
-        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        NavigationView navigationView = findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
 
         // Check that the user hasn't revoked permissions by going to Settings.
@@ -162,7 +162,7 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public void onBackPressed() { //auto-generated
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         if (drawer.isDrawerOpen(GravityCompat.START)) {
             drawer.closeDrawer(GravityCompat.START);
         } else {
@@ -194,11 +194,11 @@ public class MainActivity extends AppCompatActivity
 
     @SuppressWarnings("StatementWithEmptyBody")
     @Override
-    public boolean onNavigationItemSelected(MenuItem item) {
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
         // Handle navigation view item clicks here.
         int id = item.getItemId();
 
-        Fragment fragment = null;
+        Fragment fragment;
         FragmentManager fragmentManager =  getSupportFragmentManager();
         FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
         if (id == R.id.nav_camera) {
@@ -269,7 +269,7 @@ public class MainActivity extends AppCompatActivity
 //        FragmentManager fragmentManager = getSupportFragmentManager();
 //        fragmentManager.beginTransaction().replace(R.id.fragment_container, fragment).commit();
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
     }
@@ -346,26 +346,23 @@ public class MainActivity extends AppCompatActivity
                 EditText editLon = setTagView.findViewById(R.id.editLon);
                 setTagDialogBuilder.setCancelable(false)
                         .setPositiveButton("Save",
-                                new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        String strLat = editLat.getText().toString();
-                                        if (TextUtils.isEmpty(strLat)) {
-                                            editLat.setError("Latitude should not be empty");
-                                            return;
-                                        }
-                                        String strlon = editLon.getText().toString();
-                                        if (TextUtils.isEmpty(strlon)) {
-                                            editLon.setError("Longitude  should not be empty");
-                                            return;
-                                        }
-                                        Log.e(TAG,"Lat: " + strLat + ", " + Double.parseDouble(strLat));
-                                        Log.e(TAG,"Lon: " + strlon + ", " + Double.parseDouble(strlon));
-                                        AppUtils.setPrefPlaceCoordinate(self, Double.parseDouble(strLat), Double.parseDouble(strlon));
-                                        Log.e(TAG, "Location: " + AppUtils.getPrefPlaceLocation(self));
-                                        Toast.makeText(self, "Location Saved", Toast.LENGTH_SHORT).show();
-                                        //                                                AppUtils.setKeyManualMode(self,false);
+                                (dialog, which) -> {
+                                    String strLat = editLat.getText().toString();
+                                    if (TextUtils.isEmpty(strLat)) {
+                                        editLat.setError("Latitude should not be empty");
+                                        return;
                                     }
+                                    String strlon = editLon.getText().toString();
+                                    if (TextUtils.isEmpty(strlon)) {
+                                        editLon.setError("Longitude  should not be empty");
+                                        return;
+                                    }
+                                    Log.e(TAG,"Lat: " + strLat + ", " + Double.parseDouble(strLat));
+                                    Log.e(TAG,"Lon: " + strlon + ", " + Double.parseDouble(strlon));
+                                    AppUtils.setPrefPlaceCoordinate(self, Double.parseDouble(strLat), Double.parseDouble(strlon));
+                                    Log.e(TAG, "Location: " + AppUtils.getPrefPlaceLocation(self));
+                                    Toast.makeText(self, "Location Saved", Toast.LENGTH_SHORT).show();
+                                    //                                                AppUtils.setKeyManualMode(self,false);
                                 });
                 AlertDialog setTagDialog = setTagDialogBuilder.create();
                 setTagDialog.show();
@@ -404,7 +401,7 @@ public class MainActivity extends AppCompatActivity
         PreferenceManager.getDefaultSharedPreferences(this)
                 .unregisterOnSharedPreferenceChangeListener(this);
 
-        AppUtils.setKeyActivityActive( this,false);
+//        AppUtils.setKeyActivityActive( this,false);
         super.onStop();
     }
 
@@ -439,10 +436,10 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
         // Update the buttons state depending on whether location updates are being requested.
-        if (s.equals(AppUtils.KEY_REQUESTING_LOCATION_UPDATES)) {
+//        if (s.equals(AppUtils.KEY_REQUESTING_LOCATION_UPDATES)) {
 //            setButtonsState(sharedPreferences.getBoolean(AppUtils.KEY_REQUESTING_LOCATION_UPDATES,
 //                    false));
-        }
+//        }
         //if (s.equals(AppUtils.KEY_PLACE_LAT))
     }
 
@@ -477,16 +474,13 @@ public class MainActivity extends AppCompatActivity
                     findViewById(R.id.drawer_layout),
                     R.string.permission_rationale,
                     Snackbar.LENGTH_INDEFINITE)
-                    .setAction(R.string.ok, new View.OnClickListener() {
-                        @Override
-                        public void onClick(View view) {
-                            // Request permission
-                            ActivityCompat.requestPermissions(MainActivity.this,
-                                    permissionsArray, REQUEST_PERMISSIONS_REQUEST_CODE);
+                    .setAction(R.string.ok, view -> {
+                        // Request permission
+                        ActivityCompat.requestPermissions(MainActivity.this,
+                                permissionsArray, REQUEST_PERMISSIONS_REQUEST_CODE);
 /*                            ActivityCompat.requestPermissions(MainActivity.this,
-                                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                    REQUEST_PERMISSIONS_REQUEST_CODE);*/
-                        }
+                                new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                                REQUEST_PERMISSIONS_REQUEST_CODE);*/
                     })
                     .show();
         } else {
@@ -524,19 +518,16 @@ public class MainActivity extends AppCompatActivity
                         findViewById(R.id.drawer_layout),
                         R.string.permission_denied_explanation,
                         Snackbar.LENGTH_INDEFINITE)
-                        .setAction(R.string.settings, new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                // Build intent that displays the App settings screen.
-                                Intent intent = new Intent();
-                                intent.setAction(
-                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package",
-                                        BuildConfig.APPLICATION_ID, null);
-                                intent.setData(uri);
-                                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                startActivity(intent);
-                            }
+                        .setAction(R.string.settings, view -> {
+                            // Build intent that displays the App settings screen.
+                            Intent intent = new Intent();
+                            intent.setAction(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            Uri uri = Uri.fromParts("package",
+                                    BuildConfig.APPLICATION_ID, null);
+                            intent.setData(uri);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
                         })
                         .show();
             }
@@ -567,7 +558,7 @@ public class MainActivity extends AppCompatActivity
         Thread t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
+                List<String> rawDataList = new ArrayList<>();
                 for (GPSLocation location : mDB.locationDao().getAllLocationSynchronous()) {
                     rawDataList.add(location.toString());
                 }
@@ -580,7 +571,7 @@ public class MainActivity extends AppCompatActivity
         t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
+                List<String> rawDataList = new ArrayList<>();
                 for (WalkingEvent event : mDB.walkingEventDao().getAllActivitiesSynchronous()) {
                     rawDataList.add(event.toString());
                 }
@@ -593,7 +584,7 @@ public class MainActivity extends AppCompatActivity
         t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
+                List<String> rawDataList = new ArrayList<>();
                 for (WalkingSession session : mDB.sessionDao().getAllSessionsSynchronous()) {
                     rawDataList.add(session.toString());
                 }
@@ -606,7 +597,7 @@ public class MainActivity extends AppCompatActivity
         t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
+                List<String> rawDataList = new ArrayList<>();
                 for (HourlySteps hourlySteps : mDB.hourlyStepsDao().getAllStepsSynchronous()) {
                     rawDataList.add(hourlySteps.toString());
                 }
@@ -619,7 +610,7 @@ public class MainActivity extends AppCompatActivity
         t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
+                List<String> rawDataList = new ArrayList<>();
                 for (DailySummary report : mDB.dailySummaryDao().getAllSummariesSynchronous()) {
                     rawDataList.add(report.toString());
                 }
@@ -632,7 +623,7 @@ public class MainActivity extends AppCompatActivity
         t = new Thread() {
             public void run() {
                 AppDatabase mDB = AppDatabase.getInstance(self);
-                List<String> rawDataList = new ArrayList<String>();
+                List<String> rawDataList = new ArrayList<>();
                 for (StepDetected steps : mDB.stepDetectedDao().getAllStepsSynchronous()) {
                     rawDataList.add(steps.toString());
                 }
@@ -663,30 +654,24 @@ public class MainActivity extends AppCompatActivity
                         setTagDialogBuilder.setView(setTagView);
                         TextView tvHint = setTagView.findViewById(R.id.inputHint);
                         tvHint.setText("Input Tag for this session: ");
-                        EditText editTag = (EditText) setTagView.findViewById(R.id.editTag);
+                        EditText editTag = setTagView.findViewById(R.id.editTag);
                         setTagDialogBuilder.setCancelable(false)
                                 .setPositiveButton("Save",
-                                        new DialogInterface.OnClickListener() {
-                                            @Override
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                String textTag = editTag.getText().toString();
-                                                //send this value to Service.
-                                                mService.updateSessionTag(textTag);
-                                                //TODO: this should be done after the task finished (wait for result?)
-                                                Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
+                                        (dialog, which) -> {
+                                            String textTag = editTag.getText().toString();
+                                            //send this value to Service.
+                                            mService.updateSessionTag(textTag);
+                                            //TODO: this should be done after the task finished (wait for result?)
+                                            Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
 //                                                AppUtils.setKeyManualMode(self,false);
-                                            }
                                         })
                                 .setNegativeButton("Cancel",
-                                        new DialogInterface.OnClickListener() {
-                                            @Override
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                //send this value to Service.
-                                                mService.updateSessionTag("dumped");
-                                                dialog.cancel();
-                                                Toast.makeText(self, "Session not Saved", Toast.LENGTH_SHORT).show();
+                                        (dialog, which) -> {
+                                            //send this value to Service.
+                                            mService.updateSessionTag("dumped");
+                                            dialog.cancel();
+                                            Toast.makeText(self, "Session not Saved", Toast.LENGTH_SHORT).show();
 //                                                AppUtils.setKeyManualMode(self,false);
-                                            }
                                         });
                         AlertDialog setTagDialog = setTagDialogBuilder.create();
                         setTagDialog.show();
@@ -729,21 +714,15 @@ public class MainActivity extends AppCompatActivity
                 editTag.setInputType(InputType.TYPE_CLASS_NUMBER);
                 setTagDialogBuilder.setCancelable(false)
                         .setPositiveButton("Confirm",
-                                new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        String textTag = editTag.getText().toString();
-                                        AppUtils.setKeySamplingFrequency(self, Integer.parseInt(textTag));
-                                        //Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
-                                    }
+                                (dialog, which) -> {
+                                    String textTag = editTag.getText().toString();
+                                    AppUtils.setKeySamplingFrequency(self, Integer.parseInt(textTag));
+                                    //Toast.makeText(self, "Session Saved", Toast.LENGTH_SHORT).show();
                                 })
                         .setNegativeButton("Cancel",
-                                new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        dialog.cancel();
-                                        //Toast.makeText(self, "Session not stopped", Toast.LENGTH_SHORT).show();
-                                    }
+                                (dialog, which) -> {
+                                    dialog.cancel();
+                                    //Toast.makeText(self, "Session not stopped", Toast.LENGTH_SHORT).show();
                                 });
                 AlertDialog setTagDialog = setTagDialogBuilder.create();
                 setTagDialog.show();

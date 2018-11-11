@@ -26,35 +26,14 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-//import android.os.Handler;
-//import android.os.HandlerThread;
 import android.os.Handler;
 import android.os.IBinder;
-//import android.os.Looper;
-import android.os.PowerManager;
 import android.preference.PreferenceManager;
-import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
-
-//import com.google.android.gms.location.ActivityRecognition;
-//import com.google.android.gms.location.ActivityTransition;
-//import com.google.android.gms.location.ActivityTransitionEvent;
-//import com.google.android.gms.location.ActivityTransitionRequest;
-//import com.google.android.gms.location.ActivityTransitionResult;
-//import com.google.android.gms.location.DetectedActivity;
-//import com.google.android.gms.location.FusedLocationProviderClient;
-//import com.google.android.gms.location.LocationCallback;
-//import com.google.android.gms.location.LocationRequest;
-//import com.google.android.gms.location.LocationResult;
-//import com.google.android.gms.location.LocationServices;
-//import com.google.android.gms.maps.model.LatLng;
-//import com.google.android.gms.tasks.OnFailureListener;
-//import com.google.android.gms.tasks.OnSuccessListener;
-//import com.google.android.gms.tasks.Task;
 
 
 import com.google.android.gms.location.ActivityRecognition;
@@ -211,29 +190,29 @@ public class StepTrackingService extends Service
     private int mStepsAtStart = 0;
     private int mStepsDetect = 0;
     private int mStepCountOffset = 0;
-    private long mStepIncreaseStartTime = 0L;
+//    private long mStepIncreaseStartTime = 0L;
 //    private int mLast20StepOffset = 0;
     private class StepsCounted{
         private int stepsOffset;
         private long timestamp;
 
-        public StepsCounted(int numSteps, long timestamp) {
+        StepsCounted(int numSteps, long timestamp) {
             this.stepsOffset = numSteps;
             this.timestamp = timestamp;
         }
 
-        public int getStepsOffset() {
+        int getStepsOffset() {
             return stepsOffset;
         }
 
-        public long getTimestamp() {
+        long getTimestamp() {
             return timestamp;
         }
     }
     ArrayList<StepsCounted> arrSteps = new ArrayList<>();
 
     private BroadcastReceiver mScreenOffReceiver;
-    private PowerManager.WakeLock mWakeLock;
+//    private PowerManager.WakeLock mWakeLock;
     /**
      *  for database
      */
@@ -454,7 +433,7 @@ public class StepTrackingService extends Service
         // Called when the last client (MainActivity in case of this sample) unbinds from this
         // service. If this method is called due to a configuration change in MainActivity, we
         // do nothing. Otherwise, we make this service a foreground service.
-//        if (!mChangingConfiguration) {//TODO: && AppUtils.requestingLocationUpdates(this)) {
+//        if (!mChangingConfiguration) {// && AppUtils.requestingLocationUpdates(this)) {
 //            Log.i(TAG, "Starting foreground service");
 //            startForeground(NOTIFICATION_ID, getNotification(true)); //Anyway works for Oreo
 //        }
@@ -465,18 +444,8 @@ public class StepTrackingService extends Service
     public void onDestroy() {
         // Unregister the transitions
         ActivityRecognition.getClient(this).removeActivityTransitionUpdates(mPendingIntent)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.i(TAG, "Transitions successfully unregistered.");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.e(TAG, "Transitions could not be unregistered: " + e);
-                    }
-                });
+                .addOnSuccessListener(aVoid -> Log.i(TAG, "Transitions successfully unregistered."))
+                .addOnFailureListener(e -> Log.e(TAG, "Transitions could not be unregistered: " + e));
         if (mTransitionsReceiver != null) {
             unregisterReceiver(mTransitionsReceiver);
             mTransitionsReceiver = null;
@@ -505,7 +474,7 @@ public class StepTrackingService extends Service
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             isSuccess = false;
         }else {
-            if (mLocationManager != null && mLocationManager != null &&
+            if (mLocationManager != null &&
                     AppUtils.requestingLocationUpdates(self)) {
                 mLocationManager.removeUpdates(mLocationListener);
                 AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
@@ -513,13 +482,16 @@ public class StepTrackingService extends Service
             }
 //            if(fastUpdate) {
                 try {
-                    mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                            NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
-                    mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                            GPS_FAST_UPDATE_INTERVAL, 0, mLocationListener);//, Looper.getMainLooper());
-                    AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
-                    AppUtils.setRequestingLocationUpdates(this, true);
-                    isSuccess = true;
+                    if (mLocationManager != null) {
+                        mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+                                NETWORK_UPDATE_INTERVAL, 0, mLocationListener);
+                        mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                                GPS_FAST_UPDATE_INTERVAL, 0, mLocationListener);//, Looper.getMainLooper());
+                        AppUtils.setKeyRequestingLocationUpdatesFast(this, true);
+                        AppUtils.setRequestingLocationUpdates(this, true);
+                        isSuccess = true;
+                    }
+                    else isSuccess = false;
                 }catch (Exception e){
                     isSuccess = false;
                     AppUtils.setKeyRequestingLocationUpdatesFast(this, false);
@@ -810,13 +782,8 @@ public class StepTrackingService extends Service
                 mGPSStableTimes=0;
             }
 
-            if (mCurrentLocation.distanceTo(mHomeLocation) -
-                    mCurrentLocation.getAccuracy() > OUT_OF_HOME_DISTANCE){
-                mOutofHome = true;
-            }
-            else {
-                mOutofHome = false;
-            }
+            mOutofHome = mCurrentLocation.distanceTo(mHomeLocation) -
+                    mCurrentLocation.getAccuracy() > OUT_OF_HOME_DISTANCE;
 
             if (mSessionStarted && mWalkingSessionId != -1 ) {
                 if(mLastLocation == null){
@@ -858,7 +825,7 @@ public class StepTrackingService extends Service
                 (mSessionFile != null) &&
                 mSessionFile.exists()) {
             FileOutputStream outputStream;
-            String dataLine = "";
+            String dataLine;
             //long systime = SystemClock.elapsedRealtimeNanos();//System.currentTimeMillis();
             switch (sensorEvent.sensor.getType()) {
                 case Sensor.TYPE_STEP_DETECTOR:
@@ -1113,19 +1080,9 @@ public class StepTrackingService extends Service
                 ActivityRecognition.getClient(this)
                         .requestActivityTransitionUpdates(request, mPendingIntent);
         task.addOnSuccessListener(
-                new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void result) {
-                        Log.i(TAG, "Transitions Api was successfully registered.");
-                    }
-                });
+                result -> Log.i(TAG, "Transitions Api was successfully registered."));
         task.addOnFailureListener(
-                new OnFailureListener() {
-                    @Override
-                    public void onFailure(Exception e) {
-                        Log.e(TAG, "Transitions Api could not be registered: " + e);
-                    }
-                });
+                e -> Log.e(TAG, "Transitions Api could not be registered: " + e));
     }
 
     /**
@@ -1146,7 +1103,6 @@ public class StepTrackingService extends Service
                 ActivityTransitionResult result = ActivityTransitionResult.extractResult(intent);
                 if (result != null) {
                     for (ActivityTransitionEvent event : result.getTransitionEvents()) {
-                        //private List<AccelerometerSample> mAccSamples;
                         WalkingEvent mWalkingEvent = new WalkingEvent();
                         mWalkingEvent.WeTimestamp = System.currentTimeMillis();
                         mWalkingEvent.mTransition = event.getTransitionType();
@@ -1323,7 +1279,7 @@ public class StepTrackingService extends Service
         private HourlyStepsDao mHourlyStepDao;
 
         OnReportFinishedListener onReportFinishedListener;
-        public void setOnReportFinishedListener(
+        void setOnReportFinishedListener(
                 OnReportFinishedListener onReportFinishedListener) {
             this.onReportFinishedListener = onReportFinishedListener;
         }
@@ -1341,8 +1297,7 @@ public class StepTrackingService extends Service
             long startTime = AppUtils.getYesterdayStart();
             long endTime = AppUtils.getYesterdayEnd();
             DailySummary lastReport = mDailySummaryDao.getLastReport();
-            if(lastReport == null ||
-                    (lastReport!=null && lastReport.reportTime < startTime)){
+            if(lastReport == null || lastReport.reportTime < startTime){
                 int dailysteps = mHourlyStepDao.getDailyStep(startTime, endTime);
                 if (lastHoursteps > 0){
                     dailysteps += lastHoursteps;
@@ -1393,11 +1348,11 @@ public class StepTrackingService extends Service
     private static class updateSessionAsyncTask extends AsyncTask<WalkingSession, Void, Void> {
 
         private WalkingSessionDao mSessionDao;
-        private GPSLocationDao mLocationdao;
+//        private GPSLocationDao mLocationdao;
 
         updateSessionAsyncTask(WalkingSessionDao sDao, GPSLocationDao lDao) {
             mSessionDao = sDao;
-            mLocationdao = lDao;
+//            mLocationdao = lDao;
         }
 
         @Override
@@ -1412,41 +1367,41 @@ public class StepTrackingService extends Service
             return null;
         }
 
-        private float totalDistance(long sid){
-            //TODO: #######
-            float totalD = 0f;
-            Location lastLocation = new Location("dummy");
-            Location newLocation = new Location("dummy");
-
-            List<GPSLocation> locations = mLocationdao.getSessionLocations(sid);
-            for(GPSLocation loc: locations){
-                newLocation.setProvider("dummy");
-                newLocation.setLatitude(loc.latitude);
-                newLocation.setLongitude(loc.longitude);
-                newLocation.setAccuracy(loc.accuracy);
-                newLocation.setSpeed(loc.speed);
-                //newLocation.setElapsedRealtimeNanos(loc.GTimestamp);
-                newLocation.setTime(loc.GTimestamp);
-                if(lastLocation.getProvider().equals("set")){
-                    totalD += newLocation.distanceTo(lastLocation);
-                }
-
-                //if(loc.accuracy < GPS_ACCEPTABLE_ACCURACY && loc.speed > 0){
-                    lastLocation = newLocation;
-                    lastLocation.setProvider("set");
-                //}
-            }
-
-            return totalD;
-        }
-
-        private float avgSpeed(long sid){
-            //TODO: #####
-            float averageS = 0f;
-
-            averageS = mLocationdao.getSessionSpeed(sid);
-            return averageS;
-        }
+//        private float totalDistance(long sid){
+//            //TODO: #######
+//            float totalD = 0f;
+//            Location lastLocation = new Location("dummy");
+//            Location newLocation = new Location("dummy");
+//
+//            List<GPSLocation> locations = mLocationdao.getSessionLocations(sid);
+//            for(GPSLocation loc: locations){
+//                newLocation.setProvider("dummy");
+//                newLocation.setLatitude(loc.latitude);
+//                newLocation.setLongitude(loc.longitude);
+//                newLocation.setAccuracy(loc.accuracy);
+//                newLocation.setSpeed(loc.speed);
+//                //newLocation.setElapsedRealtimeNanos(loc.GTimestamp);
+//                newLocation.setTime(loc.GTimestamp);
+//                if(lastLocation.getProvider().equals("set")){
+//                    totalD += newLocation.distanceTo(lastLocation);
+//                }
+//
+//                //if(loc.accuracy < GPS_ACCEPTABLE_ACCURACY && loc.speed > 0){
+//                    lastLocation = newLocation;
+//                    lastLocation.setProvider("set");
+//                //}
+//            }
+//
+//            return totalD;
+//        }
+//
+//        private float avgSpeed(long sid){
+//            //TODO: #####
+//            float averageS = 0f;
+//
+//            averageS = mLocationdao.getSessionSpeed(sid);
+//            return averageS;
+//        }
     }
 
     private static class saveStepAsyncTask extends AsyncTask<HourlySteps, Void, Void> {
@@ -1478,19 +1433,16 @@ public class StepTrackingService extends Service
             if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF))
             {
                 if (!AppUtils.startingWalkingSession(context)) {
-                    mHandler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            Log.i(TAG, "Re-register sensor when screen turn off");
-                            // Unregister and register listener after screen goes off can prevent cpu sleeping?
-                            mSensorManager.unregisterListener(self);
-                            mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI);
+                    mHandler.postDelayed(() -> {
+                        Log.i(TAG, "Re-register sensor when screen turn off");
+                        // Unregister and register listener after screen goes off can prevent cpu sleeping?
+                        mSensorManager.unregisterListener(self);
+                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI);
 //                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
 //                            //without being put to sleep
 //                            if (mSessionStarted) {
 //                                registerSensorListener();
 //                            }
-                        }
                     }, SCREEN_OFF_RECEIVER_DELAY);
                 }
             }

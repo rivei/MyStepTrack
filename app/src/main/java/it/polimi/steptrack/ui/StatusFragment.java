@@ -2,21 +2,18 @@ package it.polimi.steptrack.ui;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.ToggleButton;
+
 
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
@@ -38,7 +35,7 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
 
     private Context mContext;
 
-    private static final String ARG_SESSION_STARTED = "sesssionStarted";
+//    private static final String ARG_SESSION_STARTED = "sesssionStarted";
     // the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
     private static final String ARG_HOME_LAT = "homelat";
     private static final String ARG_HOME_LON = "homelon";
@@ -82,15 +79,12 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
             bnOnOff.setEnabled(false);
         }
 
-        if (mSessionStarted) {
-            bnOnOff.setText("Stop");
-        } else {
-            bnOnOff.setText("Start");
-//            switchManual.setChecked(false);
-//            mManualMode = false;
-//            AppUtils.setKeyManualMode(mContext, mManualMode);
-//            bnOnOff.setEnabled(false);
-        }
+        //            switchManual.setChecked(false);
+        //            mManualMode = false;
+        //            AppUtils.setKeyManualMode(mContext, mManualMode);
+        //            bnOnOff.setEnabled(false);
+        if (mSessionStarted) bnOnOff.setText("Stop");
+        else bnOnOff.setText("Start");
 
     }
 
@@ -163,42 +157,33 @@ implements SharedPreferences.OnSharedPreferenceChangeListener{
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View rootView = inflater.inflate(R.layout.fragment_status, container, false);
 
         TextView tvHome = rootView.findViewById(R.id.tvHome);
 
-        tvHome.setText("Home coordinate: "+ mHomeLat + ", " + mHomeLon);
+        tvHome.setText(String.format("Home coordinate: %s, %s", mHomeLat, mHomeLon));
         //switchManual = rootView.findViewById(R.id.switchManual);
 //        tvManualMode = rootView.findViewById(R.id.tvManualMode);
         switchManual = rootView.findViewById(R.id.switchManual);
 
-        switchManual.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                AppUtils.setKeyManualMode(mContext,isChecked);
-                mManualMode = isChecked;
-                setButtonsState();
-                Log.i(TAG,"switch changed to " + mManualMode);
-            }
+        switchManual.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            AppUtils.setKeyManualMode(mContext,isChecked);
+            mManualMode = isChecked;
+            setButtonsState();
+            Log.i(TAG,"switch changed to " + mManualMode);
         });
 
         bnOnOff = rootView.findViewById(R.id.btnOnOff);
-        bnOnOff.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mListener.StatusInteraction(ON_START_CLICKED);
+        bnOnOff.setOnClickListener(view -> {
+            mListener.StatusInteraction(ON_START_CLICKED);
 //                mSessionStarted = true;
-                mSessionStarted = AppUtils.startingWalkingSession(mContext);
-                if (mSessionStarted) {
-                    bnOnOff.setText("Stop");
-                } else {
-                    bnOnOff.setText("Start");
-                }
+            mSessionStarted = AppUtils.startingWalkingSession(mContext);
+            if (mSessionStarted) bnOnOff.setText("Stop");
+            else bnOnOff.setText("Start");
 
-            }
         });
 
 //        if (savedInstanceState != null){
