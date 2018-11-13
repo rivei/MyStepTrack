@@ -52,11 +52,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
-import androidx.work.ExistingPeriodicWorkPolicy;
-import androidx.work.PeriodicWorkRequest;
-import androidx.work.WorkManager;
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
@@ -74,7 +70,6 @@ import it.polimi.steptrack.roomdatabase.entities.StepDetected;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
-import it.polimi.steptrack.workers.WakeupWorker;
 
 import static it.polimi.steptrack.AppConstants.BATCH_LATENCY;
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
@@ -90,7 +85,6 @@ import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
 import static it.polimi.steptrack.AppConstants.TRANSITIONS_RECEIVER_ACTION;
-import static it.polimi.steptrack.AppConstants.WAKE_UP_WORK;
 //import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 
 
@@ -192,7 +186,6 @@ public class StepTrackingService extends Service
     private float[] magneticMatrix = new float[3];
 
     private long sensorRecordInterval = 0;
-    private long mCurSensorTime = -1L;
     private long mLastSensorUpdate = -1L;
 
     private int mTotalStepsCount = 0;
@@ -601,7 +594,7 @@ public class StepTrackingService extends Service
             }
         };
         t.start();
-        mCurSensorTime = 0L;
+        //mCurSensorTime = 0L; //TODO: should be make local variable??
         int numofSensors = registerSensorListener();
         if (numofSensors > 0) {
             if (numofSensors < 4){
@@ -687,7 +680,7 @@ public class StepTrackingService extends Service
             mTotalDistance = 0f;
         }
         mSensorManager.unregisterListener(this); //unregiester motion sensors
-        mCurSensorTime = -1L;
+        //mCurSensorTime = -1L;//TODO: should be make local variable??
         //Never stop step counter sensor listening
         mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY);
         mSessionFile = null;
@@ -713,7 +706,7 @@ public class StepTrackingService extends Service
                 mStepsDetect = 0;
             }
             mSensorManager.unregisterListener(this); //unregiester motion sensors
-            mCurSensorTime = -1L;
+            //mCurSensorTime = -1L;//TODO: should be make local variable??
             mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
             mSessionStarted = false;
             mSessionFile = null;
@@ -858,7 +851,7 @@ public class StepTrackingService extends Service
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        mCurSensorTime = AppUtils.elapsedTime2timestamp(sensorEvent.timestamp);
+        long curSensorTime = AppUtils.elapsedTime2timestamp(sensorEvent.timestamp);
 
         if (mWalkingSessionId != -1 &&
                 (mSessionFile != null) &&
@@ -872,7 +865,7 @@ public class StepTrackingService extends Service
 //                    new Thread(() -> {
                         StepDetected stepDetected = new StepDetected();
                         stepDetected.steps = mStepsDetect;
-                        stepDetected.timestamp = mCurSensorTime;
+                        stepDetected.timestamp = curSensorTime;
                         stepDetected.session_id = mWalkingSessionId;
 //                        /**
 //                         * NOTE: in Android 8 this is considered blocking the main thread and
@@ -881,7 +874,7 @@ public class StepTrackingService extends Service
 //                        mDB.stepDetectedDao().insert(stepDetected);
 //                    }).run();
                     new insertStepAsyncTask(mDB.stepDetectedDao()).execute(stepDetected);
-                    dataLine = mCurSensorTime + "," + mStepsDetect +"\n";
+                    dataLine = curSensorTime + "," + mStepsDetect +"\n";
                     try {
                         outputStream = new FileOutputStream(mSessionFile, true);
                         outputStream.write(dataLine.getBytes());
@@ -903,17 +896,17 @@ public class StepTrackingService extends Service
             }
 
             //This is a way to have sampling frequency in file recording;
-            if ((mCurSensorTime - mLastSensorUpdate) >= sensorRecordInterval) {
-                mLastSensorUpdate = mCurSensorTime;
-                if(mCurrentLocation != null && (mCurrentLocation.getTime()/SECOND2MILLI) == (mCurSensorTime /SECOND2MILLI)){//only log when there is location
-                    dataLine = mCurSensorTime + "," +
+            if ((curSensorTime - mLastSensorUpdate) >= sensorRecordInterval) {
+                mLastSensorUpdate = curSensorTime;
+                if(mCurrentLocation != null && (mCurrentLocation.getTime()/SECOND2MILLI) == (curSensorTime /SECOND2MILLI)){//only log when there is location
+                    dataLine = curSensorTime + "," +
                             accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
                             gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
                             magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," +
                             mCurrentLocation.getLatitude() + "," + mCurrentLocation.getLongitude() + "," +
                             mCurrentLocation.getAccuracy() + "," + mCurrentLocation.getSpeed() + "\n";
                 }else {
-                    dataLine = mCurSensorTime + "," +
+                    dataLine = curSensorTime + "," +
                             accelerometerMatrix[0] + "," + accelerometerMatrix[1] + "," + accelerometerMatrix[2] + "," +
                             gyroscopeMatrix[0] + ", " + gyroscopeMatrix[1] + ", " + gyroscopeMatrix[2] + ", " +
                             magneticMatrix[0] + "," + magneticMatrix[1] + "," + magneticMatrix[2] + "," + ",,,\n";
@@ -922,7 +915,7 @@ public class StepTrackingService extends Service
                     //Log.w(TAG,"Thread starts");
                     outputStream = new FileOutputStream(mSessionFile, true);
                     outputStream.write(dataLine.getBytes());
-                    //Log.i(TAG, "write sensor data " + mCurSensorTime);
+                    //Log.i(TAG, "write sensor data " + curSensorTime);
                     outputStream.close();
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -941,7 +934,7 @@ public class StepTrackingService extends Service
             //for daily report
 //            int lastReportStep = AppUtils.getLastStepCount(self);
 //            long lastReportTime = AppUtils.getLastReportTime(self);
-//            if (lastReportTime == 0) lastReportTime = mCurSensorTime;
+//            if (lastReportTime == 0) lastReportTime = curSensorTime;
 
             //for hourly record
             long lastRecordTime = AppUtils.getLastRecordTime(self);
@@ -955,7 +948,7 @@ public class StepTrackingService extends Service
 
             if (!arrSteps.isEmpty()){
                 long lastStepsTime = arrSteps.get(arrSteps.size()-1).getTimestamp();
-                if (mCurSensorTime - lastStepsTime > 10 * SECOND2NANO){ //10 second without step increasing
+                if (curSensorTime - lastStepsTime > 20 * SECOND2MILLI){ //!!all time change to milliseconds!! SECOND2NANO){ //20 second without step increasing
                     if (mStepIncreasing){
                         WalkingEvent walkingEvent = new WalkingEvent();
                         walkingEvent.WeTimestamp = System.currentTimeMillis();
@@ -967,13 +960,13 @@ public class StepTrackingService extends Service
                     arrSteps.clear();
                 }else {
                     int stepSum = systemSteps - arrSteps.get(0).getStepsOffset();
-                    long stepDur = mCurSensorTime - arrSteps.get(0).getTimestamp();
+                    long stepDur = curSensorTime - arrSteps.get(0).getTimestamp();
                     Log.i(TAG,"timeDiff: " + stepDur);
                     Log.i(TAG,"stepDiff: " + stepSum);
                     Log.i(TAG, "array size: " + arrSteps.size());
                     if(stepSum >= 15 && stepDur > 0) { //15 steps as detected walking
                         double ratio = stepDur / stepSum;
-                        if ( ratio > 400 && ratio < 900 ) {
+                        if ( ratio > 400 && ratio < 900 ) { //cadence ratio from literature
                             if (!mStepIncreasing){
                                 WalkingEvent walkingEvent = new WalkingEvent();
                                 walkingEvent.WeTimestamp = System.currentTimeMillis();
@@ -983,17 +976,18 @@ public class StepTrackingService extends Service
                             }
                             mStepIncreasing = true;
                         }
-                        arrSteps.remove(0); //always remove the first one
                     }
+                    if (stepSum >= 50) arrSteps.remove(0); //always remove the first one
                 }
             }else {
                 mStepIncreasing = false;
             }
-            arrSteps.add(new StepsCounted(systemSteps,mCurSensorTime));
+            //TODO: why currenct sensor time can be wrong and so much advance in Samsung S8??
+            arrSteps.add(new StepsCounted(systemSteps, curSensorTime));
 
             if (!mSessionStarted) {
                 //only record the hourly steps when there is no ongoing walking session;
-                if ((mCurSensorTime > lastRecordTime + STEP_SAVE_INTERVAL) ||
+                if ((curSensorTime > lastRecordTime + STEP_SAVE_INTERVAL) ||
                         (systemSteps - hourlyStepsOffset > STEP_SAVE_OFFSET)) {
 
                     dailyreportAsyncTask dailyreportTask = new dailyreportAsyncTask(mDB);
@@ -1020,11 +1014,11 @@ public class StepTrackingService extends Service
 
                     HourlySteps hourlySteps = new HourlySteps();
                     hourlySteps.steps = systemSteps - hourlyStepsOffset;
-                    hourlySteps.timestamp = mCurSensorTime;
+                    hourlySteps.timestamp = curSensorTime;
                     new saveStepAsyncTask(mDB.hourlyStepsDao()).execute(hourlySteps);
 
                     hourlyStepsOffset = systemSteps;
-                    AppUtils.setKeyLastRecordTime(self, mCurSensorTime);
+                    AppUtils.setKeyLastRecordTime(self, curSensorTime);
                     AppUtils.setKeyRecordSteps(self, hourlyStepsOffset);
                 }
             }
@@ -1474,22 +1468,24 @@ public class StepTrackingService extends Service
                 if (!AppUtils.startingWalkingSession(context)) {
                     mHandler.postDelayed(() -> {
                         Log.i(TAG, "Re-register sensor when screen turn off");
-//                        // Unregister and register listener after screen goes off can prevent cpu sleeping?
-//                        mSensorManager.unregisterListener(self);
-//                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
-////                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
-////                            //without being put to sleep
-//                        if (mSessionStarted) registerSensorListener();
+                        // Unregister and register listener after screen goes off can prevent cpu sleeping?
+                        mSensorManager.unregisterListener(self);
+                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
+//                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
+//                            //without being put to sleep
+                        if (mSessionStarted) registerSensorListener();
+
                         if (sigMotionSensor != null){
-                            boolean isSuccess =mSensorManager.cancelTriggerSensor(mTriggerListener, sigMotionSensor);
+                            boolean isSuccess = mSensorManager.cancelTriggerSensor(mTriggerListener, sigMotionSensor);
                             Log.i(TAG,"Cancel Significant Motion Sensor trigger: " + isSuccess);
                             isSuccess = mSensorManager.requestTriggerSensor(mTriggerListener, sigMotionSensor);
                             Log.i(TAG,"Request Significant Motion Sensor trigger: " + isSuccess);
                         }
-                    }, SCREEN_OFF_RECEIVER_DELAY);
+                    }, SCREEN_OFF_RECEIVER_DELAY); //let other system events finish
                 }
             }
         }
+
     }
 
     class TriggerListener extends TriggerEventListener {
