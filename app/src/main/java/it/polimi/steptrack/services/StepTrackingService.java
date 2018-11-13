@@ -17,6 +17,8 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.TriggerEvent;
+import android.hardware.TriggerEventListener;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -50,7 +52,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 import it.polimi.steptrack.AppUtils;
 import it.polimi.steptrack.R;
 import it.polimi.steptrack.roomdatabase.AppDatabase;
@@ -68,6 +74,7 @@ import it.polimi.steptrack.roomdatabase.entities.StepDetected;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.ui.MainActivity;
+import it.polimi.steptrack.workers.WakeupWorker;
 
 import static it.polimi.steptrack.AppConstants.BATCH_LATENCY;
 import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
@@ -83,6 +90,7 @@ import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
 import static it.polimi.steptrack.AppConstants.TRANSITIONS_RECEIVER_ACTION;
+import static it.polimi.steptrack.AppConstants.WAKE_UP_WORK;
 //import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 
 
@@ -176,6 +184,8 @@ public class StepTrackingService extends Service
     private Sensor accSensor = null;
     private Sensor gyroSensor = null;
     private Sensor magnSensor = null;
+    private Sensor sigMotionSensor;
+    private TriggerEventListener mTriggerListener = new TriggerListener();
 
     private float[] accelerometerMatrix = new float[3];
     private float[] gyroscopeMatrix = new float[3];
@@ -225,6 +235,9 @@ public class StepTrackingService extends Service
     private final String sessionHeader = "timestamp,acc_X,acc_Y,acc_Z,gyro_X,gyro_Y,gyro_Z," +
             "magn_X,magn_Y,magn_Z,latitude,longitude,accuracy,speed \n";
 
+//    private WorkManager mWorkManager; //!!!
+
+
 
     public StepTrackingService() { //Empty constructor
     }
@@ -236,6 +249,20 @@ public class StepTrackingService extends Service
             AppUtils.setKeyFirstInstallTime(self, System.currentTimeMillis());
         }
         mDB = AppDatabase.getInstance(this);
+//        //************* Try to used work manager to solve the doze mode problem *****************//
+//        mWorkManager = WorkManager.getInstance(); //!!!try
+//        PeriodicWorkRequest.Builder hourWorkBuilder =
+//                new PeriodicWorkRequest.Builder(WakeupWorker.class, 20, TimeUnit.MINUTES);
+//
+//
+//        // Add Tag to workBuilder
+//        hourWorkBuilder.addTag(WAKE_UP_WORK);
+//        // Create the actual work object:
+//        PeriodicWorkRequest hourWork = hourWorkBuilder.build();
+//        // Then enqueue the recurring task:
+//        //mWorkManager.enqueue(hourWork);
+//        mWorkManager.enqueueUniquePeriodicWork(WAKE_UP_WORK,ExistingPeriodicWorkPolicy.KEEP,hourWork);
+//        //********************** end ****************************//
 
         mLocationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
         mHomeLocation =  AppUtils.getPrefPlaceLocation(self);
@@ -304,6 +331,7 @@ public class StepTrackingService extends Service
             accSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             gyroSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
             magnSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            sigMotionSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION);
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
@@ -311,6 +339,16 @@ public class StepTrackingService extends Service
         } else {
             Toast.makeText(this, "Step count sensor missing. Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
+        }
+        if (sigMotionSensor != null){
+            boolean isRegistered = mSensorManager.requestTriggerSensor(mTriggerListener, sigMotionSensor);
+            Log.i(TAG,"Request Significant Motion Sensor Listener: " + isRegistered);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                Log.i(TAG,"Is wake-up sensor: " + sigMotionSensor.isWakeUpSensor());
+            }
+        } else {
+            Toast.makeText(this, "Significant Motion Sensor not available!", Toast.LENGTH_LONG).show();
+            Log.e(TAG,"Significant Motion Sensor not available!");
         }
         long freq = AppUtils.getSamplingFrequency(self);
         if (freq == 0) {
@@ -461,6 +499,8 @@ public class StepTrackingService extends Service
                 .unregisterOnSharedPreferenceChangeListener(this);
 
 //        releaseWakeLock();//!!!
+        // Call disable to ensure that the trigger request has been canceled.
+        if (sigMotionSensor != null) mSensorManager.cancelTriggerSensor(mTriggerListener, sigMotionSensor);
 
         super.onDestroy();
     }
@@ -928,9 +968,9 @@ public class StepTrackingService extends Service
                 }else {
                     int stepSum = systemSteps - arrSteps.get(0).getStepsOffset();
                     long stepDur = mCurSensorTime - arrSteps.get(0).getTimestamp();
-//                    Log.i(TAG,"timeDiff: " + stepDur);
-//                    Log.i(TAG,"stepDiff: " + stepSum);
-//                    Log.i(TAG, "array size: " + arrSteps.size());
+                    Log.i(TAG,"timeDiff: " + stepDur);
+                    Log.i(TAG,"stepDiff: " + stepSum);
+                    Log.i(TAG, "array size: " + arrSteps.size());
                     if(stepSum >= 15 && stepDur > 0) { //15 steps as detected walking
                         double ratio = stepDur / stepSum;
                         if ( ratio > 400 && ratio < 900 ) {
@@ -1434,17 +1474,32 @@ public class StepTrackingService extends Service
                 if (!AppUtils.startingWalkingSession(context)) {
                     mHandler.postDelayed(() -> {
                         Log.i(TAG, "Re-register sensor when screen turn off");
-                        // Unregister and register listener after screen goes off can prevent cpu sleeping?
-                        mSensorManager.unregisterListener(self);
-                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
-//                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
-//                            //without being put to sleep
-                        if (mSessionStarted) registerSensorListener();
+//                        // Unregister and register listener after screen goes off can prevent cpu sleeping?
+//                        mSensorManager.unregisterListener(self);
+//                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
+////                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
+////                            //without being put to sleep
+//                        if (mSessionStarted) registerSensorListener();
+                        if (sigMotionSensor != null){
+                            boolean isSuccess =mSensorManager.cancelTriggerSensor(mTriggerListener, sigMotionSensor);
+                            Log.i(TAG,"Cancel Significant Motion Sensor trigger: " + isSuccess);
+                            isSuccess = mSensorManager.requestTriggerSensor(mTriggerListener, sigMotionSensor);
+                            Log.i(TAG,"Request Significant Motion Sensor trigger: " + isSuccess);
+                        }
                     }, SCREEN_OFF_RECEIVER_DELAY);
                 }
             }
         }
     }
 
-
+    class TriggerListener extends TriggerEventListener {
+        //!!! try this way to see if it can keep phone awake when the phone is in doze mode
+        public void onTrigger(TriggerEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_SIGNIFICANT_MOTION) {
+                //re-register the listener (As it is a one shot sensor, it will be canceled automatically)
+                boolean isRegistered = mSensorManager.requestTriggerSensor(mTriggerListener, sigMotionSensor);
+                Log.i(TAG,"Request Significant Motion Sensor Listener: " + isRegistered);
+            }
+        }
+    }
 }
