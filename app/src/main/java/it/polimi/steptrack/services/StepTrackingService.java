@@ -328,7 +328,7 @@ public class StepTrackingService extends Service
         }
         if (countSensor != null) {
             Toast.makeText(this, "Started Counting Steps", Toast.LENGTH_LONG).show();
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//, BATCH_LATENCY);
         } else {
             Toast.makeText(this, "Step count sensor missing. Device not Compatible!", Toast.LENGTH_LONG).show();
             this.stopSelf();
@@ -682,7 +682,7 @@ public class StepTrackingService extends Service
         mSensorManager.unregisterListener(this); //unregiester motion sensors
         //mCurSensorTime = -1L;//TODO: should be make local variable??
         //Never stop step counter sensor listening
-        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI, BATCH_LATENCY);
+        mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);// BATCH_LATENCY);
         mSessionFile = null;
         updateNotification( "Session not recording");
         Log.e(TAG, "Stop recording.");
@@ -707,7 +707,7 @@ public class StepTrackingService extends Service
             }
             mSensorManager.unregisterListener(this); //unregiester motion sensors
             //mCurSensorTime = -1L;//TODO: should be make local variable??
-            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
+            mSensorManager.registerListener(this, countSensor, SensorManager.SENSOR_DELAY_UI);//BATCH_LATENCY);
             mSessionStarted = false;
             mSessionFile = null;
             mLastLocation = null;
@@ -801,8 +801,8 @@ public class StepTrackingService extends Service
                 Log.i(TAG, "GPS stable +1");
                 mGPSStableTimes++;
             }
-            if ((mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD) ||
-                (mLastLocation!=null && mCurrentLocation.getAccuracy() > 2 * mLastLocation.getAccuracy())){
+            if ((mCurrentLocation.getAccuracy() > GPS_ACCURACY_THRESHOLD)){// ||
+//                (mLastLocation!=null && mCurrentLocation.getAccuracy() > 2 * mLastLocation.getAccuracy())){
                 if (mGPSStableTimes > 0){
                     if(mGPSStableTimes > 5) mGPSStableTimes = 5;
                     mGPSStableTimes--;
@@ -977,7 +977,7 @@ public class StepTrackingService extends Service
                             mStepIncreasing = true;
                         }
                     }
-                    if (stepSum >= 50) arrSteps.remove(0); //always remove the first one
+                    if ((stepSum > 30) && (arrSteps.size() > 2)) arrSteps.remove(0); //always remove the oldest steps
                 }
             }else {
                 mStepIncreasing = false;
@@ -1230,7 +1230,7 @@ public class StepTrackingService extends Service
                     autostart = true;
                 }
                 if (!arrSteps.isEmpty() &&
-                        (curSysTime - arrSteps.get(arrSteps.size()-1).getTimestamp() > 30 * SECOND2MILLI)){ //30 second without step increasing
+                        (curSysTime - arrSteps.get(arrSteps.size()-1).getTimestamp() > 20 * SECOND2MILLI)){ //20 second without step increasing
                     if (mStepIncreasing){
                         WalkingEvent walkingEvent = new WalkingEvent();
                         walkingEvent.WeTimestamp = System.currentTimeMillis();
@@ -1469,11 +1469,13 @@ public class StepTrackingService extends Service
                     mHandler.postDelayed(() -> {
                         Log.i(TAG, "Re-register sensor when screen turn off");
                         // Unregister and register listener after screen goes off can prevent cpu sleeping?
-                        mSensorManager.unregisterListener(self);
-                        mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI,BATCH_LATENCY);
-//                            //NOTE: it seems whenever session started, GPS is activated and recording will continue
+                        if(!mSessionStarted) {
+                            mSensorManager.unregisterListener(self);
+                            mSensorManager.registerListener(self, countSensor, SensorManager.SENSOR_DELAY_UI);//, BATCH_LATENCY);
+                        }
+//                            //NOTE: it seems when session started, GPS is activated and recording will continue
 //                            //without being put to sleep
-                        if (mSessionStarted) registerSensorListener();
+//                        if (mSessionStarted) registerSensorListener();
 
                         if (sigMotionSensor != null){
                             boolean isSuccess = mSensorManager.cancelTriggerSensor(mTriggerListener, sigMotionSensor);

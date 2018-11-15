@@ -44,7 +44,7 @@ public final class AppConstants {
      * For stepcount sensors
       */
     public final static long MICROSECONDS_IN_ONE_MINUTE = 60000000;
-    public final static int BATCH_LATENCY = 5000000; //in microseconds
+    public final static int BATCH_LATENCY = 2000000; //!!in microseconds, NOT MILLISECOND
     public static final long SCREEN_OFF_RECEIVER_DELAY = 500; //in milliseconds
 
     /**
