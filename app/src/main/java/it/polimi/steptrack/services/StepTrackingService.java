@@ -30,6 +30,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
@@ -76,6 +77,9 @@ import static it.polimi.steptrack.AppConstants.GPS_ACCEPTABLE_ACCURACY;
 import static it.polimi.steptrack.AppConstants.GPS_FAST_UPDATE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_FOR_SUM;
 import static it.polimi.steptrack.AppConstants.GPS_ACCURACY_THRESHOLD;
+import static it.polimi.steptrack.AppConstants.MILLI2NANO;
+import static it.polimi.steptrack.AppConstants.MINUTE2MILLI;
+import static it.polimi.steptrack.AppConstants.MINUTE2NANO;
 import static it.polimi.steptrack.AppConstants.NETWORK_UPDATE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.OUT_OF_HOME_DISTANCE;
 import static it.polimi.steptrack.AppConstants.SCREEN_OFF_RECEIVER_DELAY;
@@ -851,7 +855,16 @@ public class StepTrackingService extends Service
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        long curSensorTime = AppUtils.elapsedTime2timestamp(sensorEvent.timestamp);
+        long delta = (sensorEvent.timestamp - SystemClock.elapsedRealtimeNanos()) / MILLI2NANO;
+        long systime = System.currentTimeMillis();
+        //this value should always be negative, because the event is in the past
+        long curSensorTime;
+        if (delta < 0 && Math.abs(delta) < 5 * MINUTE2MILLI) {
+            //it should be impossible that sensorevent will be delivered 5 minutes later
+            curSensorTime = systime + delta;
+        } else{
+            curSensorTime = systime;
+        }
 
         if (mWalkingSessionId != -1 &&
                 (mSessionFile != null) &&

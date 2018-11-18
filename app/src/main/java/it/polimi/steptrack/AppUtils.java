@@ -192,7 +192,8 @@ public class AppUtils {
 
     //convert
     public static long elapsedTime2timestamp(long timeNano){
-        //long curTime = System.currentTimeMillis();
+        //this value should always be negative because this function is only call realtime!!!
+        long delta = (timeNano - SystemClock.elapsedRealtimeNanos())/MILLI2NANO;
         return System.currentTimeMillis() + (timeNano - SystemClock.elapsedRealtimeNanos())/MILLI2NANO;
     }
 
