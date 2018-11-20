@@ -88,6 +88,7 @@ import static it.polimi.steptrack.AppConstants.SECOND2NANO;
 import static it.polimi.steptrack.AppConstants.SERVICE_RUNNING_FOREGROUND;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_INTERVAL;
 import static it.polimi.steptrack.AppConstants.STEP_SAVE_OFFSET;
+import static it.polimi.steptrack.AppConstants.STOPSERVICE_ACTION;
 import static it.polimi.steptrack.AppConstants.TRANSITIONS_RECEIVER_ACTION;
 //import static it.polimi.steptrack.AppConstants.UPDATE_DISTANCE_IN_METERS;
 
@@ -415,18 +416,23 @@ public class StepTrackingService extends Service
     //This is called only when there is Start service
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(TAG, "Foreground service started");
+        if (intent.getAction().equals(STOPSERVICE_ACTION)) {
+            Log.i(TAG, "Received Stop Foreground Intent");
+            stopForeground(true);
+            stopSelf();
+        }else {
+            Log.i(TAG, "Foreground service started");
+            //************************* For step count ~*********************//
+            //start Monitoring activities and locations
+            setupActivityTransitions();
 
-        //************************* For step count ~*********************//
-        //start Monitoring activities and locations
-        setupActivityTransitions();
+            PreferenceManager.getDefaultSharedPreferences(self)
+                    .registerOnSharedPreferenceChangeListener(this);
 
-        PreferenceManager.getDefaultSharedPreferences(self)
-                .registerOnSharedPreferenceChangeListener(this);
-
-        //start foreground in all situations
-        startForeground(NOTIFICATION_ID, getNotification(true));
-        // Restart the service if its killed
+            //start foreground in all situations
+            startForeground(NOTIFICATION_ID, getNotification(true));
+            // Restart the service if its killed
+        }
         return START_STICKY;
     }
 
@@ -476,6 +482,12 @@ public class StepTrackingService extends Service
 
     @Override
     public void onDestroy() {
+        if (mIsWalking) mIsWalking = false;
+        if (mSessionStarted){
+            stopRecording("dumped");
+            mSessionStarted = false;
+            AppUtils.setKeyStartingWalkingSession(self,mSessionStarted);
+        }
         // Unregister the transitions
         ActivityRecognition.getClient(this).removeActivityTransitionUpdates(mPendingIntent)
                 .addOnSuccessListener(aVoid -> Log.i(TAG, "Transitions successfully unregistered."))
@@ -483,14 +495,19 @@ public class StepTrackingService extends Service
         if (mTransitionsReceiver != null) {
             unregisterReceiver(mTransitionsReceiver);
             mTransitionsReceiver = null;
+            Log.i(TAG,"Unregister Activity Recognition Listener.");
         }
         if (mScreenOffReceiver != null){
             unregisterReceiver(mScreenOffReceiver);
             mScreenOffReceiver = null;
+            Log.i(TAG,"Unregister Screen turn off listener");
         }
 
 //        mServiceHandler.removeCallbacksAndMessages(null);
         mLocationManager.removeUpdates(mLocationListener);
+        AppUtils.setKeyRequestingLocationUpdatesFast(self,false);
+        AppUtils.setRequestingLocationUpdates(self,false);
+        Log.i(TAG, "remove location update");
 
         PreferenceManager.getDefaultSharedPreferences(self)
                 .unregisterOnSharedPreferenceChangeListener(this);
@@ -1288,7 +1305,6 @@ public class StepTrackingService extends Service
                         updateNotification("Counting steps");
                     }
                 }
-
                 Log.i(TAG,"Is step increasing:"+ mStepIncreasing);
             }
 //        }else{ //When manual mode is on, stop all ongoing sessions??
@@ -1297,6 +1313,8 @@ public class StepTrackingService extends Service
 //                updateSessionTag("aborted");
 //            }
         }
+
+        AppUtils.setKeyStartingWalkingSession(self,mSessionStarted);
     }
 
 //    public void acquireWakeLock() {

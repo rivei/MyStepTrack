@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.provider.SyncStateContract;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
@@ -68,6 +69,9 @@ import it.polimi.steptrack.roomdatabase.entities.StepDetected;
 import it.polimi.steptrack.roomdatabase.entities.WalkingEvent;
 import it.polimi.steptrack.roomdatabase.entities.WalkingSession;
 import it.polimi.steptrack.services.StepTrackingService;
+
+import static it.polimi.steptrack.AppConstants.STARTSERVICE_ACTION;
+import static it.polimi.steptrack.AppConstants.STOPSERVICE_ACTION;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener,
@@ -155,6 +159,7 @@ public class MainActivity extends AppCompatActivity
         if (AppUtils.getServiceRunningStatus(self) <= 0) {
             // Start Step Counting service
             Intent serviceIntent = new Intent(this, StepTrackingService.class);
+            serviceIntent.setAction(STARTSERVICE_ACTION);
             startService(serviceIntent); //Activate onStartCommand
         }
 
@@ -256,7 +261,21 @@ public class MainActivity extends AppCompatActivity
             fragmentTransaction.commit();
 //            }
         } else if (id == R.id.nav_send) {
-
+            AlertDialog.Builder builder = new AlertDialog.Builder(self);
+            builder.setMessage("Exiting will lose today's record, are you sure?")
+                    .setPositiveButton("Yes",
+                            (dialog, which) -> {
+                                Intent stopIntent = new Intent(MainActivity.this, StepTrackingService.class);
+                                stopIntent.setAction(STOPSERVICE_ACTION);
+                                startService(stopIntent);
+                                finish();
+                            })
+                    .setNegativeButton("No",
+                            (dialog, which) -> {
+                                dialog.cancel();
+                            });
+            AlertDialog exitDialog = builder.create();
+            exitDialog.show();
         }
 
 //        try{

@@ -4,6 +4,9 @@ package it.polimi.steptrack;
 public final class AppConstants {
     public static final String PACKAGE_NAME = "it.polimi.steptrack";
 
+    public static final String STARTSERVICE_ACTION = "start_service";
+    public static final String STOPSERVICE_ACTION = "stop_service";
+
     public static final long MILLI2NANO = 1000000;
     public static final long SECOND2NANO = 1000 * MILLI2NANO;
     public static final long MINUTE2NANO = 60 * SECOND2NANO;
